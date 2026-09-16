@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Users — LASSO Admin</title>
+<link rel="stylesheet" href="/lasso/assets/css/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">LASSO Admin<span class="dot">.</span></div>
+  <nav>
+    <a href="/lasso/admin/dashboard.html">Dashboard</a>
+    <a href="/lasso/admin/materials.html">Materials</a>
+    <a href="/lasso/admin/users.html" class="active">Users</a>
+    <a href="/lasso/admin/sales.html">Sales &amp; Cashier</a>
+    <button onclick="logout('/lasso/admin-login.html')">Logout</button>
+  </nav>
+</div>
+
+<div class="page container">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <h1>Manage User Accounts</h1>
+    <button class="btn btn-gold" onclick="openNewAdminModal()">+ Register Admin</button>
+  </div>
+
+  <div class="tabs">
+    <button class="active" onclick="switchTab('students', this)">Students</button>
+    <button onclick="switchTab('admins', this)">Administrators</button>
+  </div>
+
+  <div class="card">
+    <table id="usersTable"></table>
+  </div>
+</div>
+
+<div id="modalBackdrop" class="modal-backdrop" style="display:none;">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script src="/lasso/assets/js/api.js"></script>
+<script>
+let currentType = 'students';
+
+async function init() {
+  await requireAuth('admin');
+  await loadUsers();
+}
+
+function switchTab(type, btn) {
+  currentType = type;
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadUsers();
+}
+
+async function loadUsers() {
+  const r = await apiGet(`/admin/users_list.php?type=${currentType}`);
+  const table = document.getElementById('usersTable');
+  if (!r.success) { table.innerHTML = `<tr><td>${r.message}</td></tr>`; return; }
+
+  if (currentType === 'students') {
+    table.innerHTML = `<thead><tr><th>Student ID</th><th>Name</th><th>Program</th><th>Year/Section</th><th>Active Subs</th><th>Status</th><th></th></tr></thead>
+      <tbody>${r.students.map(s => `
+        <tr>
+          <td>${s.student_id_number}</td>
+          <td>${s.full_name}<div class="muted">${s.university_email}</div></td>
+          <td>${s.program_name || '—'}</td>
+          <td>${s.year_level} - ${s.section}</td>
+          <td>${s.active_subscriptions}</td>
+          <td><span class="tag ${s.status === 'active' ? 'tag-active' : 'tag-trashed'}">${s.status}</span></td>
+          <td>
+            ${s.status === 'active'
+              ? `<button class="btn btn-danger btn-sm" onclick="userAction(${s.id},'student','trash')">Trash</button>`
+              : `<button class="btn btn-outline btn-sm" onclick="userAction(${s.id},'student','restore')">Restore</button>`}
+          </td>
+        </tr>`).join('') || '<tr><td colspan="7" class="muted">No students yet.</td></tr>'}</tbody>`;
+  } else {
+    table.innerHTML = `<thead><tr><th>Admin ID</th><th>Name</th><th>Position</th><th>Status</th><th></th></tr></thead>
+      <tbody>${r.admins.map(a => `
+        <tr>
+          <td>${a.admin_id}</td>
+          <td>${a.full_name}</td>
+          <td>${a.position}</td>
+          <td><span class="tag ${a.status === 'active' ? 'tag-active' : 'tag-trashed'}">${a.status}</span></td>
+          <td>
+            ${a.status === 'active'
+              ? `<button class="btn btn-danger btn-sm" onclick="userAction(${a.id},'admin','trash')">Trash</button>`
+              : `<button class="btn btn-outline btn-sm" onclick="userAction(${a.id},'admin','restore')">Restore</button>`}
+          </td>
+        </tr>`).join('') || '<tr><td colspan="5" class="muted">No administrators yet.</td></tr>'}</tbody>`;
+  }
+}
+
+async function userAction(id, type, action) {
+  const r = await apiPost('/admin/users_action.php', { id, type, action });
+  if (r.success) { toast(r.message, 'success'); loadUsers(); }
+  else toast(r.message, 'error');
+}
+
+function openNewAdminModal() {
+  document.getElementById('modalContent').innerHTML = `
+    <h2>Register Admin Account</h2>
+    <form id="newAdminForm">
+      <label>Admin ID</label><input type="text" id="na_id" required>
+      <label>Full Name</label><input type="text" id="na_name" required>
+      <label>Position</label><input type="text" id="na_position" required>
+      <label>Password</label><input type="password" id="na_password" minlength="8" required>
+      <div id="naAlert"></div>
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button type="button" class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-gold" style="flex:1;">Create</button>
+      </div>
+    </form>`;
+  document.getElementById('modalBackdrop').style.display = 'flex';
+
+  document.getElementById('newAdminForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const r = await apiPost('/admin/register_admin.php', {
+      admin_id: document.getElementById('na_id').value.trim(),
+      full_name: document.getElementById('na_name').value.trim(),
+      position: document.getElementById('na_position').value.trim(),
+      password: document.getElementById('na_password').value,
+    });
+    const box = document.getElementById('naAlert');
+    if (r.success) { toast(r.message, 'success'); closeModal(); switchTab('admins', document.querySelectorAll('.tabs button')[1]); }
+    else box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
+  });
+}
+
+function closeModal() { document.getElementById('modalBackdrop').style.display = 'none'; }
+document.getElementById('modalBackdrop').addEventListener('click', (e) => { if (e.target.id === 'modalBackdrop') closeModal(); });
+
+init();
+</script>
+</body>
+</html>

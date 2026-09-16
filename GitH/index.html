@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LASSO — Student Login</title>
+<link rel="stylesheet" href="/lasso/assets/css/style.css">
+</head>
+<body>
+<div class="auth-shell">
+  <div class="auth-card">
+    <h1>LASSO</h1>
+    <p class="sub">Learning Asset Subscription and Sales Operation</p>
+    <div id="alertBox"></div>
+    <form id="loginForm">
+      <label>University Email or Student ID</label>
+      <input type="text" id="identifier" required placeholder="e.g. juan.delacruz@university.edu.ph">
+      <label>Password</label>
+      <input type="password" id="password" required placeholder="••••••••">
+      <button class="btn btn-primary btn-block" style="margin-top:18px;" type="submit">Log In</button>
+    </form>
+    <p class="switch-link">No account yet? <a href="/lasso/register.html" style="color:var(--navy); font-weight:700;">Register</a></p>
+    <p class="switch-link"><a href="/lasso/admin-login.html" style="color:var(--muted);">Administrator login</a></p>
+  </div>
+</div>
+<script src="/lasso/assets/js/api.js"></script>
+<script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const identifier = document.getElementById('identifier').value.trim();
+  const password = document.getElementById('password').value;
+  const box = document.getElementById('alertBox');
+  box.innerHTML = '';
+  const r = await apiPost('/auth/login.php', { identifier, password, role: 'student' });
+  if (r.success) {
+    window.location.href = '/lasso/student/store.html';
+  } else {
+    box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
+  }
+});
+</script>
+</body>
+</html>

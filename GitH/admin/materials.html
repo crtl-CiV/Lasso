@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Materials — LASSO Admin</title>
+<link rel="stylesheet" href="/lasso/assets/css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">LASSO Admin<span class="dot">.</span></div>
+  <nav>
+    <a href="/lasso/admin/dashboard.html">Dashboard</a>
+    <a href="/lasso/admin/materials.html" class="active">Materials</a>
+    <a href="/lasso/admin/users.html">Users</a>
+    <a href="/lasso/admin/sales.html">Sales &amp; Cashier</a>
+    <button onclick="logout('/lasso/admin-login.html')">Logout</button>
+  </nav>
+</div>
+
+<div class="page container">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <h1>Manage Instructional Materials</h1>
+    <button class="btn btn-gold" onclick="openUploadModal()">+ Upload Material</button>
+  </div>
+
+  <div class="tabs">
+    <button class="active" data-status="all" onclick="switchTab('all', this)">All</button>
+    <button data-status="published" onclick="switchTab('published', this)">Published</button>
+    <button data-status="draft" onclick="switchTab('draft', this)">Drafts</button>
+    <button data-status="trashed" onclick="switchTab('trashed', this)">Trash / Archive</button>
+  </div>
+
+  <div id="grid" class="grid grid-3"></div>
+</div>
+
+<div id="modalBackdrop" class="modal-backdrop" style="display:none;">
+  <div class="modal" id="modalContent" style="max-width:560px;"></div>
+</div>
+
+<script src="/lasso/assets/js/api.js"></script>
+<script>
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+let refs = { departments: [], programs: [] };
+let currentStatus = 'all';
+
+async function init() {
+  await requireAuth('admin');
+  const r = await apiGet('/reference_data.php');
+  if (r.success) refs = r;
+  await loadMaterials();
+}
+
+function switchTab(status, btn) {
+  currentStatus = status;
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadMaterials();
+}
+
+function materialAdminCard(m) {
+  const cover = m.cover_image ? `<img src="/lasso/api/${m.cover_image}" alt="">` : m.title;
+  const tagClass = { draft: 'tag-draft', published: 'tag-published', trashed: 'tag-trashed' }[m.status];
+  let actions = '';
+  if (m.status === 'draft') actions += `<button class="btn btn-primary btn-sm" onclick="doAction(${m.id},'publish')">Publish</button>`;
+  if (m.status === 'published') {
+    actions += m.is_promoted
+      ? `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'unpromote')">Unpromote</button>`
+      : `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'promote')">Promote</button>`;
+  }
+  if (m.status === 'trashed') actions += `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'restore')">Restore</button>`;
+  else actions += `<button class="btn btn-danger btn-sm" onclick="doAction(${m.id},'trash')">Trash</button>`;
+
+  return `
+    <div class="mcard">
+      <div class="cover">${m.is_promoted ? '<span class="promoted-tag">Featured</span>' : ''}${cover}</div>
+      <div class="body">
+        <div class="title">${m.title}</div>
+        <div class="meta">${m.material_code} • ${m.total_pages || 0} page(s) • ${m.subscriber_count} subscribers</div>
+        <span class="tag ${tagClass}">${m.status}</span>
+        <div class="price">${peso(m.price)}</div>
+      </div>
+      <div class="actions" style="flex-wrap:wrap;">
+        <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(m)})'>Edit</button>
+        <button class="btn btn-outline btn-sm" onclick="openAddPagesModal(${m.id}, '${m.title.replace(/'/g, "\\'")}')">Add Pages</button>
+        ${actions}
+      </div>
+    </div>`;
+}
+
+async function loadMaterials() {
+  const r = await apiGet(`/admin/materials_list.php?status=${currentStatus}`);
+  const grid = document.getElementById('grid');
+  if (!r.success) { grid.innerHTML = `<p>${r.message}</p>`; return; }
+  grid.innerHTML = r.materials.length ? r.materials.map(materialAdminCard).join('') : '<div class="empty-state">No materials here.</div>';
+}
+
+async function doAction(id, action) {
+  const r = await apiPost('/admin/materials_action.php', { id, action });
+  if (r.success) { toast(r.message, 'success'); loadMaterials(); }
+  else toast(r.message, 'error');
+}
+
+function deptProgramOptions(selectedDept, selectedProg) {
+  const depOpts = refs.departments.map(d => `<option value="${d.id}" ${d.id==selectedDept?'selected':''}>${d.name}</option>`).join('');
+  const progOpts = refs.programs.map(p => `<option value="${p.id}" ${p.id==selectedProg?'selected':''}>${p.name}</option>`).join('');
+  return { depOpts, progOpts };
+}
+
+// ---------------------------------------------------------
+// Upload modal: two modes — PDF Document (auto page-split in the
+// browser via pdf.js) or manual Page Images.
+// ---------------------------------------------------------
+function openUploadModal() {
+  const { depOpts, progOpts } = deptProgramOptions();
+  document.getElementById('modalContent').innerHTML = `
+    <h2>Upload Instructional Material</h2>
+    <div class="tabs" style="margin-bottom:10px;">
+      <button type="button" class="active" id="tabPdf" onclick="switchUploadMode('pdf')">Upload PDF Document</button>
+      <button type="button" id="tabImages" onclick="switchUploadMode('images')">Upload Page Images</button>
+    </div>
+    <form id="uploadForm">
+      <label>Title</label><input type="text" id="u_title" required>
+      <label>Description</label><textarea id="u_description" rows="3"></textarea>
+      <div class="form-row">
+        <div><label>Department</label><select id="u_department"><option value="">—</option>${depOpts}</select></div>
+        <div><label>Program</label><select id="u_program"><option value="">—</option>${progOpts}</select></div>
+      </div>
+      <div class="form-row">
+        <div><label>Year Level</label><input type="text" id="u_year" placeholder="e.g. 3rd Year"></div>
+        <div><label>Price (₱)</label><input type="number" id="u_price" min="0" step="0.01" required></div>
+      </div>
+      <label>Cover Image <span class="muted">(optional — first PDF page is used if left blank)</span></label>
+      <input type="file" id="u_cover" accept="image/*">
+
+      <div id="pdfModeFields">
+        <label>PDF Document</label>
+        <input type="file" id="u_pdf" accept="application/pdf">
+        <p class="muted" id="pdfInfo"></p>
+      </div>
+      <div id="imagesModeFields" style="display:none;">
+        <label>Page Images (select in reading order, page 1 first)</label>
+        <input type="file" id="u_pages" accept="image/*" multiple>
+      </div>
+
+      <label>Non-body pages (comma-separated page numbers — cover, TOC, glossary, etc.)</label>
+      <input type="text" id="u_nonbody" placeholder="e.g. 1,2,3">
+      <label>Pages excluded from the 5-page preview (comma-separated)</label>
+      <input type="text" id="u_excluded" placeholder="e.g. 40,41">
+
+      <div id="uploadProgress" style="display:none; margin-top:10px;">
+        <div class="progress-bar"><div id="uploadProgressBar" style="width:0%;"></div></div>
+        <p class="muted" id="uploadProgressText" style="margin-top:6px;"></p>
+      </div>
+      <div id="uploadAlert"></div>
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button type="button" class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-gold" style="flex:1;" id="uploadSubmitBtn">Upload</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('modalBackdrop').style.display = 'flex';
+
+  document.getElementById('u_pdf').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    const info = document.getElementById('pdfInfo');
+    if (!f) { info.textContent = ''; return; }
+    info.textContent = 'Reading document…';
+    try {
+      const pdf = await pdfjsLib.getDocument(await f.arrayBuffer()).promise;
+      info.textContent = `${pdf.numPages} page(s) detected.`;
+    } catch (err) {
+      info.textContent = 'Could not read this file — please make sure it is a valid PDF.';
+    }
+  });
+
+  document.getElementById('uploadForm').addEventListener('submit', handleUploadSubmit);
+}
+
+function switchUploadMode(mode) {
+  document.getElementById('tabPdf').classList.toggle('active', mode === 'pdf');
+  document.getElementById('tabImages').classList.toggle('active', mode === 'images');
+  document.getElementById('pdfModeFields').style.display = mode === 'pdf' ? 'block' : 'none';
+  document.getElementById('imagesModeFields').style.display = mode === 'images' ? 'block' : 'none';
+  document.getElementById('uploadForm').dataset.mode = mode;
+}
+
+function commonFields() {
+  const toArr = (s) => s.split(',').map(x => x.trim()).filter(Boolean).map(Number);
+  return {
+    title: document.getElementById('u_title').value.trim(),
+    description: document.getElementById('u_description').value.trim(),
+    department_id: document.getElementById('u_department').value,
+    program_id: document.getElementById('u_program').value,
+    year_level: document.getElementById('u_year').value.trim(),
+    price: document.getElementById('u_price').value,
+    non_body_pages: JSON.stringify(toArr(document.getElementById('u_nonbody').value)),
+    preview_excluded_pages: JSON.stringify(toArr(document.getElementById('u_excluded').value)),
+  };
+}
+
+function setProgress(pct, text) {
+  document.getElementById('uploadProgress').style.display = 'block';
+  document.getElementById('uploadProgressBar').style.width = pct + '%';
+  document.getElementById('uploadProgressText').textContent = text;
+}
+
+/** Render one PDF page to a JPEG Blob, capped at ~1400px wide to keep file size reasonable. */
+async function renderPdfPageToBlob(pdf, pageNum) {
+  const page = await pdf.getPage(pageNum);
+  const baseViewport = page.getViewport({ scale: 1 });
+  const targetWidth = 1400;
+  const scale = Math.min(2, targetWidth / baseViewport.width);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+}
+
+const UPLOAD_BATCH_SIZE = 8; // safely under PHP's default max_file_uploads (20)
+
+async function handleUploadSubmit(e) {
+  e.preventDefault();
+  const box = document.getElementById('uploadAlert');
+  box.innerHTML = '';
+  const mode = document.getElementById('uploadForm').dataset.mode || 'pdf';
+  const fields = commonFields();
+  if (!fields.title || fields.price === '') { box.innerHTML = `<div class="alert alert-error">Title and price are required.</div>`; return; }
+
+  const submitBtn = document.getElementById('uploadSubmitBtn');
+  submitBtn.disabled = true;
+
+  try {
+    if (mode === 'images') {
+      const files = document.getElementById('u_pages').files;
+      if (!files.length) { box.innerHTML = `<div class="alert alert-error">Please choose at least one page image.</div>`; submitBtn.disabled = false; return; }
+      const fd = new FormData();
+      Object.entries(fields).forEach(([k, v]) => fd.append(k, v));
+      const cover = document.getElementById('u_cover').files[0];
+      if (cover) fd.append('cover_image', cover);
+      for (const f of files) fd.append('pages[]', f);
+
+      setProgress(50, 'Uploading…');
+      const res = await fetch('/lasso/api/admin/materials_upload.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+      const r = await res.json();
+      if (r.success) { setProgress(100, 'Done.'); toast(r.message, 'success'); closeModal(); loadMaterials(); }
+      else box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
+      submitBtn.disabled = false;
+      return;
+    }
+
+    // ---- PDF mode ----
+    const pdfFile = document.getElementById('u_pdf').files[0];
+    if (!pdfFile) { box.innerHTML = `<div class="alert alert-error">Please choose a PDF file.</div>`; submitBtn.disabled = false; return; }
+
+    setProgress(2, 'Reading document…');
+    const pdf = await pdfjsLib.getDocument(await pdfFile.arrayBuffer()).promise;
+    const numPages = pdf.numPages;
+
+    // Step 1: create the material record first.
+    const createFd = new FormData();
+    Object.entries(fields).forEach(([k, v]) => createFd.append(k, v));
+    createFd.append('expect_more_batches', '1');
+    const manualCover = document.getElementById('u_cover').files[0];
+    let firstPageBlob = null;
+    if (!manualCover) {
+      setProgress(4, `Rendering page 1 of ${numPages} for cover…`);
+      firstPageBlob = await renderPdfPageToBlob(pdf, 1);
+      createFd.append('cover_image', firstPageBlob, 'cover.jpg');
+    } else {
+      createFd.append('cover_image', manualCover);
+    }
+
+    let res = await fetch('/lasso/api/admin/materials_upload.php', { method: 'POST', body: createFd, credentials: 'same-origin' });
+    let r = await res.json();
+    if (!r.success) { box.innerHTML = `<div class="alert alert-error">${r.message}</div>`; submitBtn.disabled = false; return; }
+    const materialId = r.material_id;
+
+    // Step 2: render + upload pages in small batches.
+    let batch = [];
+    let uploaded = 0;
+    for (let p = 1; p <= numPages; p++) {
+      setProgress(5 + Math.round((p / numPages) * 90), `Processing page ${p} of ${numPages}…`);
+      const blob = (p === 1 && firstPageBlob) ? firstPageBlob : await renderPdfPageToBlob(pdf, p);
+      batch.push(blob);
+
+      if (batch.length >= UPLOAD_BATCH_SIZE || p === numPages) {
+        const batchFd = new FormData();
+        batchFd.append('material_id', materialId);
+        batch.forEach((b, i) => batchFd.append('pages[]', b, `page.jpg`));
+        setProgress(5 + Math.round((p / numPages) * 90), `Uploading pages ${uploaded + 1}–${uploaded + batch.length} of ${numPages}…`);
+        const bres = await fetch('/lasso/api/admin/materials_upload.php', { method: 'POST', body: batchFd, credentials: 'same-origin' });
+        const br = await bres.json();
+        if (!br.success) { box.innerHTML = `<div class="alert alert-error">Upload stopped: ${br.message} (material saved as draft with ${uploaded} page(s) so far — you can Add Pages later.)</div>`; submitBtn.disabled = false; loadMaterials(); return; }
+        uploaded += batch.length;
+        batch = [];
+      }
+    }
+
+    setProgress(100, 'Done.');
+    toast(`Uploaded ${uploaded} page(s).`, 'success');
+    closeModal();
+    loadMaterials();
+  } catch (err) {
+    box.innerHTML = `<div class="alert alert-error">Something went wrong: ${err.message}</div>`;
+  }
+  submitBtn.disabled = false;
+}
+
+// ---------------------------------------------------------
+// Add Pages to an existing material (append more from a PDF or images)
+// ---------------------------------------------------------
+function openAddPagesModal(materialId, title) {
+  document.getElementById('modalContent').innerHTML = `
+    <h2>Add Pages — ${title}</h2>
+    <div class="tabs" style="margin-bottom:10px;">
+      <button type="button" class="active" id="apTabPdf" onclick="switchAddPagesMode('pdf')">From PDF</button>
+      <button type="button" id="apTabImages" onclick="switchAddPagesMode('images')">From Images</button>
+    </div>
+    <div id="apPdfFields">
+      <label>PDF Document</label>
+      <input type="file" id="ap_pdf" accept="application/pdf">
+    </div>
+    <div id="apImagesFields" style="display:none;">
+      <label>Page Images (in order)</label>
+      <input type="file" id="ap_pages" accept="image/*" multiple>
+    </div>
+    <div id="apProgress" style="display:none; margin-top:10px;">
+      <div class="progress-bar"><div id="apProgressBar" style="width:0%;"></div></div>
+      <p class="muted" id="apProgressText" style="margin-top:6px;"></p>
+    </div>
+    <div id="apAlert"></div>
+    <div style="display:flex; gap:10px; margin-top:14px;">
+      <button type="button" class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancel</button>
+      <button type="button" class="btn btn-gold" style="flex:1;" onclick="submitAddPages(${materialId})">Add Pages</button>
+    </div>
+  `;
+  document.getElementById('modalBackdrop').style.display = 'flex';
+  document.getElementById('modalContent').dataset.mode = 'pdf';
+}
+
+function switchAddPagesMode(mode) {
+  document.getElementById('apTabPdf').classList.toggle('active', mode === 'pdf');
+  document.getElementById('apTabImages').classList.toggle('active', mode === 'images');
+  document.getElementById('apPdfFields').style.display = mode === 'pdf' ? 'block' : 'none';
+  document.getElementById('apImagesFields').style.display = mode === 'images' ? 'block' : 'none';
+  document.getElementById('modalContent').dataset.mode = mode;
+}
+
+async function submitAddPages(materialId) {
+  const mode = document.getElementById('modalContent').dataset.mode || 'pdf';
+  const box = document.getElementById('apAlert');
+  box.innerHTML = '';
+  const setP = (pct, text) => {
+    document.getElementById('apProgress').style.display = 'block';
+    document.getElementById('apProgressBar').style.width = pct + '%';
+    document.getElementById('apProgressText').textContent = text;
+  };
+
+  try {
+    if (mode === 'images') {
+      const files = document.getElementById('ap_pages').files;
+      if (!files.length) { box.innerHTML = `<div class="alert alert-error">Please choose at least one image.</div>`; return; }
+      const fd = new FormData();
+      fd.append('material_id', materialId);
+      for (const f of files) fd.append('pages[]', f);
+      setP(50, 'Uploading…');
+      const res = await fetch('/lasso/api/admin/materials_upload.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+      const r = await res.json();
+      if (r.success) { toast(r.message, 'success'); closeModal(); loadMaterials(); }
+      else box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
+      return;
+    }
+
+    const pdfFile = document.getElementById('ap_pdf').files[0];
+    if (!pdfFile) { box.innerHTML = `<div class="alert alert-error">Please choose a PDF file.</div>`; return; }
+    setP(2, 'Reading document…');
+    const pdf = await pdfjsLib.getDocument(await pdfFile.arrayBuffer()).promise;
+    const numPages = pdf.numPages;
+
+    let batch = [];
+    let uploaded = 0;
+    for (let p = 1; p <= numPages; p++) {
+      setP(Math.round((p / numPages) * 95), `Processing page ${p} of ${numPages}…`);
+      const blob = await renderPdfPageToBlob(pdf, p);
+      batch.push(blob);
+      if (batch.length >= UPLOAD_BATCH_SIZE || p === numPages) {
+        const fd = new FormData();
+        fd.append('material_id', materialId);
+        batch.forEach(b => fd.append('pages[]', b, 'page.jpg'));
+        const res = await fetch('/lasso/api/admin/materials_upload.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+        const r = await res.json();
+        if (!r.success) { box.innerHTML = `<div class="alert alert-error">Stopped: ${r.message} (${uploaded} page(s) were saved.)</div>`; loadMaterials(); return; }
+        uploaded += batch.length;
+        batch = [];
+      }
+    }
+    setP(100, 'Done.');
+    toast(`Added ${uploaded} page(s).`, 'success');
+    closeModal();
+    loadMaterials();
+  } catch (err) {
+    box.innerHTML = `<div class="alert alert-error">Something went wrong: ${err.message}</div>`;
+  }
+}
+
+function openEditModal(m) {
+  const { depOpts, progOpts } = deptProgramOptions(m.department_id, m.program_id);
+  document.getElementById('modalContent').innerHTML = `
+    <h2>Edit Material</h2>
+    <form id="editForm">
+      <label>Title</label><input type="text" id="e_title" value="${m.title.replace(/"/g,'&quot;')}" required>
+      <label>Description</label><textarea id="e_description" rows="3">${m.description || ''}</textarea>
+      <div class="form-row">
+        <div><label>Department</label><select id="e_department"><option value="">—</option>${depOpts}</select></div>
+        <div><label>Program</label><select id="e_program"><option value="">—</option>${progOpts}</select></div>
+      </div>
+      <div class="form-row">
+        <div><label>Year Level</label><input type="text" id="e_year" value="${m.year_level || ''}"></div>
+        <div><label>Price (₱)</label><input type="number" id="e_price" min="0" step="0.01" value="${m.price}"></div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button type="button" class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" style="flex:1;">Save</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('modalBackdrop').style.display = 'flex';
+
+  document.getElementById('editForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const r = await apiPost('/admin/materials_edit.php', {
+      id: m.id,
+      title: document.getElementById('e_title').value.trim(),
+      description: document.getElementById('e_description').value.trim(),
+      department_id: document.getElementById('e_department').value,
+      program_id: document.getElementById('e_program').value,
+      year_level: document.getElementById('e_year').value.trim(),
+      price: document.getElementById('e_price').value,
+    });
+    if (r.success) { toast(r.message, 'success'); closeModal(); loadMaterials(); }
+    else toast(r.message, 'error');
+  });
+}
+
+function closeModal() { document.getElementById('modalBackdrop').style.display = 'none'; }
+document.getElementById('modalBackdrop').addEventListener('click', (e) => { if (e.target.id === 'modalBackdrop') closeModal(); });
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LASSO — Student Registration</title>
+<link rel="stylesheet" href="/lasso/assets/css/style.css">
+</head>
+<body>
+<div class="auth-shell">
+  <div class="auth-card" style="max-width:560px;">
+    <h1>Create Student Account</h1>
+    <p class="sub">Registration is required before you can browse the Store.</p>
+    <div id="alertBox"></div>
+    <form id="regForm">
+      <label>University Email</label>
+      <input type="email" id="university_email" required>
+
+      <label>Student ID Number</label>
+      <input type="text" id="student_id_number" required placeholder="e.g. 2023-00123">
+
+      <label>Full Name</label>
+      <input type="text" id="full_name" required>
+
+      <div class="form-row">
+        <div>
+          <label>College Department</label>
+          <select id="department_id" required></select>
+        </div>
+        <div>
+          <label>College Program</label>
+          <select id="program_id" required></select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div>
+          <label>Year Level</label>
+          <select id="year_level" required>
+            <option value="">Select</option>
+            <option>1st Year</option><option>2nd Year</option>
+            <option>3rd Year</option><option>4th Year</option><option>5th Year</option>
+          </select>
+        </div>
+        <div>
+          <label>Section</label>
+          <input type="text" id="section" required placeholder="e.g. 3B">
+        </div>
+      </div>
+
+      <label>Password</label>
+      <input type="password" id="password" required minlength="8" placeholder="At least 8 characters">
+
+      <label>Student ID Photo — Front</label>
+      <input type="file" id="id_photo_front" accept="image/*" required>
+
+      <label>Student ID Photo — Back</label>
+      <input type="file" id="id_photo_back" accept="image/*" required>
+      <p class="muted">Used solely to verify you are a currently enrolled student.</p>
+
+      <button class="btn btn-primary btn-block" style="margin-top:18px;" type="submit">Register</button>
+    </form>
+    <p class="switch-link">Already have an account? <a href="/lasso/index.html" style="color:var(--navy); font-weight:700;">Log in</a></p>
+  </div>
+</div>
+<script src="/lasso/assets/js/api.js"></script>
+<script>
+let programs = [];
+
+async function loadRefs() {
+  const r = await apiGet('/reference_data.php');
+  if (!r.success) return;
+  programs = r.programs;
+  const dep = document.getElementById('department_id');
+  dep.innerHTML = '<option value="">Select department</option>' +
+    r.departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+  dep.addEventListener('change', renderPrograms);
+  renderPrograms();
+}
+
+function renderPrograms() {
+  const depId = document.getElementById('department_id').value;
+  const prog = document.getElementById('program_id');
+  const filtered = programs.filter(p => String(p.department_id) === String(depId));
+  prog.innerHTML = '<option value="">Select program</option>' +
+    filtered.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+}
+
+loadRefs();
+
+document.getElementById('regForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const box = document.getElementById('alertBox');
+  box.innerHTML = '';
+
+  const fd = new FormData();
+  fd.append('university_email', document.getElementById('university_email').value.trim());
+  fd.append('student_id_number', document.getElementById('student_id_number').value.trim());
+  fd.append('full_name', document.getElementById('full_name').value.trim());
+  fd.append('department_id', document.getElementById('department_id').value);
+  fd.append('program_id', document.getElementById('program_id').value);
+  fd.append('year_level', document.getElementById('year_level').value);
+  fd.append('section', document.getElementById('section').value.trim());
+  fd.append('password', document.getElementById('password').value);
+  fd.append('id_photo_front', document.getElementById('id_photo_front').files[0]);
+  fd.append('id_photo_back', document.getElementById('id_photo_back').files[0]);
+
+  const res = await fetch('/lasso/api/auth/register.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+  const r = await res.json();
+  if (r.success) {
+    box.innerHTML = `<div class="alert alert-success">${r.message}</div>`;
+    setTimeout(() => window.location.href = '/lasso/index.html', 1200);
+  } else {
+    box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
+  }
+});
+</script>
+</body>
+</html>

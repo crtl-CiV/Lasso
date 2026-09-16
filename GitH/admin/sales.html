@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sales &amp; Cashier — LASSO Admin</title>
+<link rel="stylesheet" href="/lasso/assets/css/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">LASSO Admin<span class="dot">.</span></div>
+  <nav>
+    <a href="/lasso/admin/dashboard.html">Dashboard</a>
+    <a href="/lasso/admin/materials.html">Materials</a>
+    <a href="/lasso/admin/users.html">Users</a>
+    <a href="/lasso/admin/sales.html" class="active">Sales &amp; Cashier</a>
+    <button onclick="logout('/lasso/admin-login.html')">Logout</button>
+  </nav>
+</div>
+
+<div class="page container">
+  <h1>Cashier — Confirm Payment</h1>
+  <p class="muted">Enter the billing code presented by the student at the cashier to release their validation code.</p>
+  <div class="card">
+    <div id="cashierAlert"></div>
+    <form id="cashierForm" style="display:flex; gap:8px;">
+      <input type="text" id="billingCode" placeholder="Billing code, e.g. BS-XXXXXXXX" style="flex:1;" required>
+      <button class="btn btn-gold" type="submit">Confirm Payment</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Pending Payments</h2>
+    <table>
+      <thead><tr><th>Billing Code</th><th>Student</th><th>Amount</th><th>Term</th><th>Code Status</th><th>Validation Code</th></tr></thead>
+      <tbody id="pendingBody"></tbody>
+    </table>
+  </div>
+
+  <h1 style="margin-top:30px;">Sales Report</h1>
+  <p class="muted">Filter by any combination of category and period, then Generate. Every filter is optional — leave any of them on "All" to include everything.</p>
+
+  <div class="card">
+    <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:12px;">
+      <div>
+        <label>Group By</label>
+        <select id="groupBy">
+          <option value="material">Instructional Material</option>
+          <option value="department">College Department</option>
+          <option value="program">College Program</option>
+          <option value="year_level">Year Level</option>
+          <option value="semester">Semestral Period</option>
+        </select>
+      </div>
+      <div>
+        <label>Material</label>
+        <select id="f_material"><option value="0">All materials</option></select>
+      </div>
+      <div>
+        <label>Department</label>
+        <select id="f_department"><option value="0">All departments</option></select>
+      </div>
+      <div>
+        <label>Program</label>
+        <select id="f_program"><option value="0">All programs</option></select>
+      </div>
+      <div>
+        <label>Semester</label>
+        <select id="f_semester"><option value="">All semesters</option></select>
+      </div>
+      <div>
+        <label>Academic Year</label>
+        <select id="f_academic_year"><option value="">All academic years</option></select>
+      </div>
+      <div>
+        <label>Date From</label>
+        <input type="date" id="f_date_from">
+      </div>
+      <div>
+        <label>Date To</label>
+        <input type="date" id="f_date_to">
+      </div>
+    </div>
+    <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="loadReport()">Generate</button>
+      <button class="btn btn-outline" onclick="resetFilters()">Reset Filters</button>
+      <button class="btn btn-gold" onclick="printReport()" style="margin-left:auto;">Print Report</button>
+    </div>
+  </div>
+
+  <div class="grid grid-3">
+    <div class="card">
+      <div class="muted">Total Subscriptions (filtered)</div>
+      <div id="summarySubs" style="font-size:1.7rem; font-weight:800; color:var(--navy);">0</div>
+    </div>
+    <div class="card">
+      <div class="muted">Total Revenue (filtered)</div>
+      <div id="summaryRevenue" style="font-size:1.7rem; font-weight:800; color:var(--navy);">₱0.00</div>
+    </div>
+    <div class="card">
+      <div class="muted">Report Generated</div>
+      <div id="summaryGeneratedAt" style="font-size:1rem; font-weight:700; color:var(--navy); margin-top:8px;">—</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th id="labelHeader">Category</th><th>Total Subscriptions</th><th>Total Revenue</th></tr></thead>
+      <tbody id="reportBody"></tbody>
+    </table>
+  </div>
+
+  <h1 style="margin-top:30px;">Subscription Status Monitoring</h1>
+  <div class="card">
+    <table>
+      <thead><tr><th>Material</th><th>Active Subscribers</th><th>Total Ever Subscribed</th></tr></thead>
+      <tbody id="subStatusBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="/lasso/assets/js/api.js"></script>
+<script>
+let refs = { departments: [], programs: [] };
+let lastReport = null;
+
+async function init() {
+  await requireAuth('admin');
+  await loadFilterOptions();
+  await loadPending();
+  await loadReport();
+  await loadSubStatus();
+}
+
+async function loadFilterOptions() {
+  const [r1, r2, r3] = await Promise.all([
+    apiGet('/reference_data.php'),
+    apiGet('/admin/report_filters.php'),
+    apiGet('/admin/materials_list.php?status=published'),
+  ]);
+
+  if (r1.success) {
+    refs = r1;
+    document.getElementById('f_department').innerHTML =
+      '<option value="0">All departments</option>' + r1.departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    document.getElementById('f_program').innerHTML =
+      '<option value="0">All programs</option>' + r1.programs.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  }
+  if (r2.success) {
+    document.getElementById('f_semester').innerHTML =
+      '<option value="">All semesters</option>' + r2.semesters.map(s => `<option value="${s}">${s}</option>`).join('');
+    document.getElementById('f_academic_year').innerHTML =
+      '<option value="">All academic years</option>' + r2.academic_years.map(y => `<option value="${y}">${y}</option>`).join('');
+  }
+  if (r3.success) {
+    document.getElementById('f_material').innerHTML =
+      '<option value="0">All materials</option>' + r3.materials.map(m => `<option value="${m.id}">${m.title}</option>`).join('');
+  }
+}
+
+function resetFilters() {
+  document.getElementById('groupBy').value = 'material';
+  ['f_material', 'f_department', 'f_program', 'f_semester', 'f_academic_year'].forEach(id => document.getElementById(id).value = document.getElementById(id).options[0].value);
+  document.getElementById('f_date_from').value = '';
+  document.getElementById('f_date_to').value = '';
+  loadReport();
+}
+
+function currentFilterParams() {
+  return new URLSearchParams({
+    group_by: document.getElementById('groupBy').value,
+    material_id: document.getElementById('f_material').value,
+    department_id: document.getElementById('f_department').value,
+    program_id: document.getElementById('f_program').value,
+    semester: document.getElementById('f_semester').value,
+    academic_year: document.getElementById('f_academic_year').value,
+    date_from: document.getElementById('f_date_from').value,
+    date_to: document.getElementById('f_date_to').value,
+  });
+}
+
+document.getElementById('cashierForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const box = document.getElementById('cashierAlert');
+  const billing_code = document.getElementById('billingCode').value.trim();
+  const r = await apiPost('/admin/confirm_payment.php', { billing_code });
+  if (r.success) {
+    box.innerHTML = `
+      <div class="alert alert-success">
+        Payment confirmed for <b>${r.student_name}</b> (${r.student_id_number}).
+      </div>
+      <div class="card" style="border:2px dashed var(--gold); text-align:center; margin-top:0;">
+        <p class="muted" style="margin:0 0 6px;">Give this validation code to the student:</p>
+        <div style="font-size:1.6rem; font-weight:800; letter-spacing:1px; color:var(--navy);">${r.validation_code}</div>
+      </div>`;
+    document.getElementById('billingCode').value = '';
+    loadPending();
+  } else {
+    box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
+  }
+});
+
+async function loadPending() {
+  const r = await apiGet('/admin/pending_billings.php');
+  const body = document.getElementById('pendingBody');
+  if (!r.success || !r.pending_billings.length) { body.innerHTML = '<tr><td colspan="6" class="muted">No pending payments.</td></tr>'; return; }
+  body.innerHTML = r.pending_billings.map(b => `
+    <tr>
+      <td>${b.billing_code}</td>
+      <td>${b.full_name} (${b.student_id_number})</td>
+      <td>${peso(b.total_amount)}</td>
+      <td>${b.semester}, AY ${b.academic_year}</td>
+      <td><span class="tag ${b.code_status === 'ready' ? 'tag-active' : 'tag-draft'}">${b.code_status}</span></td>
+      <td>${b.code ? `<b>${b.code}</b>` : '<span class="muted">Not yet released</span>'}</td>
+    </tr>`).join('');
+}
+
+async function loadReport() {
+  const params = currentFilterParams();
+  const r = await apiGet(`/admin/sales_report.php?${params.toString()}`);
+  const body = document.getElementById('reportBody');
+  document.getElementById('labelHeader').textContent = document.getElementById('groupBy').selectedOptions[0].text;
+
+  if (!r.success) { body.innerHTML = `<tr><td colspan="3" class="muted">${r.message}</td></tr>`; return; }
+
+  lastReport = r;
+  document.getElementById('summarySubs').textContent = r.summary.total_subscriptions;
+  document.getElementById('summaryRevenue').textContent = peso(r.summary.total_revenue);
+  document.getElementById('summaryGeneratedAt').textContent = r.generated_at;
+
+  body.innerHTML = r.report.length
+    ? r.report.map(row => `<tr><td>${row.label ?? '—'}</td><td>${row.total_subscriptions}</td><td>${peso(row.total_revenue)}</td></tr>`).join('')
+    : '<tr><td colspan="3" class="muted">No matching subscriptions for these filters.</td></tr>';
+}
+
+function printReport() {
+  if (!lastReport) return;
+  const groupLabel = document.getElementById('groupBy').selectedOptions[0].text;
+  const f = lastReport.filters_applied;
+  const filterLines = [
+    f.material_id ? `Material: ${document.getElementById('f_material').selectedOptions[0].text}` : null,
+    f.department_id ? `Department: ${document.getElementById('f_department').selectedOptions[0].text}` : null,
+    f.program_id ? `Program: ${document.getElementById('f_program').selectedOptions[0].text}` : null,
+    f.semester ? `Semester: ${f.semester}` : null,
+    f.academic_year ? `Academic Year: ${f.academic_year}` : null,
+    f.date_from ? `From: ${f.date_from}` : null,
+    f.date_to ? `To: ${f.date_to}` : null,
+  ].filter(Boolean);
+
+  const rows = lastReport.report.map(row => `<tr><td>${row.label ?? '—'}</td><td style="text-align:right;">${row.total_subscriptions}</td><td style="text-align:right;">${peso(row.total_revenue)}</td></tr>`).join('');
+
+  const win = window.open('', '_blank', 'width=800,height=900');
+  win.document.write(`
+    <html><head><title>LASSO Sales Report</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 30px; color: #111; }
+      h1 { color: #1e3a8a; margin-bottom:2px; }
+      .meta { color:#555; font-size:.85rem; margin-bottom:18px; }
+      table { width:100%; border-collapse: collapse; margin-top: 16px; }
+      th, td { border: 1px solid #ccc; padding: 8px 10px; font-size: .9rem; }
+      th { background: #1e3a8a; color: #fff; text-align:left; }
+      tfoot td { font-weight: 800; background: #f3f4f6; }
+      .filters { font-size:.85rem; color:#333; margin-top:6px; }
+    </style></head><body>
+    <h1>LASSO Sales Report</h1>
+    <div class="meta">Grouped by: ${groupLabel} &nbsp;•&nbsp; Generated: ${lastReport.generated_at}</div>
+    ${filterLines.length ? `<div class="filters"><b>Filters applied:</b> ${filterLines.join(' | ')}</div>` : '<div class="filters"><b>Filters applied:</b> None (all data)</div>'}
+    <table>
+      <thead><tr><th>${groupLabel}</th><th style="text-align:right;">Total Subscriptions</th><th style="text-align:right;">Total Revenue</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="3">No matching subscriptions.</td></tr>'}</tbody>
+      <tfoot><tr><td>Total</td><td style="text-align:right;">${lastReport.summary.total_subscriptions}</td><td style="text-align:right;">${peso(lastReport.summary.total_revenue)}</td></tr></tfoot>
+    </table>
+    </body></html>
+  `);
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+async function loadSubStatus() {
+  const r = await apiGet('/admin/subscription_status.php');
+  const body = document.getElementById('subStatusBody');
+  if (!r.success || !r.materials.length) { body.innerHTML = '<tr><td colspan="3" class="muted">No materials yet.</td></tr>'; return; }
+  body.innerHTML = r.materials.map(m => `
+    <tr><td>${m.title}</td><td>${m.active_subscribers || 0}</td><td>${m.total_ever_subscribed || 0}</td></tr>
+  `).join('');
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Library — LASSO</title>
+<link rel="stylesheet" href="/lasso/assets/css/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">LASSO<span class="dot">.</span></div>
+  <nav>
+    <a href="/lasso/student/store.html">Store</a>
+    <a href="/lasso/student/cart.html">Cart<span class="badge-count" id="cartBadge" style="display:none;">0</span></a>
+    <a href="/lasso/student/library.html" class="active">Library</a>
+    <a href="/lasso/student/profile.html">Profile</a>
+    <button onclick="logout()">Logout</button>
+  </nav>
+</div>
+
+<div class="page container">
+  <h1>Library</h1>
+  <p class="muted">Your subscribed instructional materials, progress, and access status.</p>
+  <div id="grid" class="grid grid-3"></div>
+</div>
+
+<div id="modalBackdrop" class="modal-backdrop" style="display:none;">
+  <div class="modal" id="modalContent" style="max-width:700px;"></div>
+</div>
+
+<script src="/lasso/assets/js/api.js"></script>
+<script>
+async function init() {
+  await requireAuth('student');
+  await refreshCartBadge();
+  await loadLibrary();
+}
+
+async function refreshCartBadge() {
+  const r = await apiGet('/cart/list.php');
+  const badge = document.getElementById('cartBadge');
+  if (r.success && r.items.length) { badge.style.display = 'inline-block'; badge.textContent = r.items.length; }
+  else badge.style.display = 'none';
+}
+
+function libCard(m) {
+  const tagClass = m.status === 'active' ? 'tag-active' : 'tag-expired';
+  const cover = m.cover_image ? `<img src="/lasso/api/${m.cover_image}" alt="">` : m.title;
+  return `
+    <div class="mcard">
+      <div class="cover" onclick="openReader(${m.material_id})" style="cursor:pointer;">${cover}</div>
+      <div class="body">
+        <div class="title">${m.title}</div>
+        <div class="meta">${m.material_code} • Renewed ${m.semester_count}x</div>
+        <span class="tag ${tagClass}">${m.status}</span>
+        <div class="progress-bar" style="margin-top:6px;"><div style="width:${m.percent_complete}%;"></div></div>
+        <div class="meta">${m.percent_complete}% complete • expires ${m.expiry_date}</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary btn-sm" style="flex:1;" onclick="openReader(${m.material_id})" ${m.status !== 'active' ? 'disabled' : ''}>
+          ${m.status === 'active' ? 'Continue Reading' : 'Access Expired'}
+        </button>
+      </div>
+    </div>`;
+}
+
+async function loadLibrary() {
+  const r = await apiGet('/subscription/library.php');
+  const grid = document.getElementById('grid');
+  if (!r.success) { grid.innerHTML = `<div class="empty-state">${r.message}</div>`; return; }
+  if (!r.library.length) {
+    grid.innerHTML = `<div class="empty-state">
+      <p>Your Library is empty.</p>
+      <p class="muted">Subscribe to materials from the Store and validate your code to see them here.</p>
+      <a class="btn btn-primary" href="/lasso/student/store.html" style="margin-top:10px; display:inline-flex;">Go to Store</a>
+    </div>`;
+    return;
+  }
+  grid.innerHTML = r.library.map(libCard).join('');
+}
+
+async function openReader(materialId) {
+  const r = await apiGet(`/materials/get.php?id=${materialId}`);
+  if (!r.success) { toast(r.message, 'error'); return; }
+  const m = r.material;
+  renderReader(m, m.accessible_pages[0] || 1);
+}
+
+function renderReader(m, page) {
+  document.getElementById('modalContent').innerHTML = `
+    <h2>${m.title}</h2>
+    <div class="protected" style="border:1px solid #e5e7eb; border-radius:8px; padding:8px; text-align:center;">
+      <img class="viewer-page-img protected" src="/lasso/api/materials/view_page.php?material_id=${m.id}&page=${page}">
+    </div>
+    <div class="viewer-toolbar">
+      <button class="btn btn-outline btn-sm" onclick="renderReader(${JSON.stringify(m).replace(/"/g,'&quot;')}, ${page - 1})" ${page <= 1 ? 'disabled' : ''}>&larr; Prev</button>
+      <span class="muted">Page ${page} of ${m.total_pages}</span>
+      <button class="btn btn-outline btn-sm" onclick="renderReader(${JSON.stringify(m).replace(/"/g,'&quot;')}, ${page + 1})" ${page >= m.total_pages ? 'disabled' : ''}>Next &rarr;</button>
+    </div>
+    <button class="btn btn-primary btn-block" style="margin-top:14px;" onclick="closeModal(); loadLibrary();">Close</button>
+  `;
+  document.getElementById('modalBackdrop').style.display = 'flex';
+}
+
+function closeModal() { document.getElementById('modalBackdrop').style.display = 'none'; }
+
+init();
+</script>
+</body>
+</html>

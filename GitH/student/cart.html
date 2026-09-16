@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cart — LASSO</title>
+<link rel="stylesheet" href="/lasso/assets/css/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">LASSO<span class="dot">.</span></div>
+  <nav>
+    <a href="/lasso/student/store.html">Store</a>
+    <a href="/lasso/student/cart.html" class="active">Cart<span class="badge-count" id="cartBadge" style="display:none;">0</span></a>
+    <a href="/lasso/student/library.html">Library</a>
+    <a href="/lasso/student/profile.html">Profile</a>
+    <button onclick="logout()">Logout</button>
+  </nav>
+</div>
+
+<div class="page container" style="max-width:720px;">
+  <h1>Cart</h1>
+  <p class="muted">Review your selected instructional materials, then check out to generate a billing statement.</p>
+
+  <div id="pendingBox"></div>
+  <div id="cartBox" class="card"></div>
+
+  <h1 style="margin-top:30px;">Billing History</h1>
+  <p class="muted">Reprint any billing statement you've generated before.</p>
+  <div class="card">
+    <table>
+      <thead><tr><th>Billing Code</th><th>Date</th><th>Term</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+      <tbody id="historyBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="modalBackdrop" class="modal-backdrop" style="display:none;">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script src="/lasso/assets/js/api.js"></script>
+<script>
+async function init() {
+  await requireAuth('student');
+  await refreshCartBadge();
+  await loadPending();
+  await loadCart();
+  await loadHistory();
+}
+
+async function refreshCartBadge() {
+  const r = await apiGet('/cart/list.php');
+  const badge = document.getElementById('cartBadge');
+  if (r.success && r.items.length) { badge.style.display = 'inline-block'; badge.textContent = r.items.length; }
+  else badge.style.display = 'none';
+}
+
+async function loadPending() {
+  const r = await apiGet('/subscription/status.php');
+  const box = document.getElementById('pendingBox');
+  if (!r.success || !r.pending_billings.length) { box.innerHTML = ''; return; }
+  box.innerHTML = r.pending_billings.map(b => `
+    <div class="card" style="border-left:4px solid var(--gold);">
+      <b>Billing #${b.billing_code}</b> — ${peso(b.total_amount)}
+      ${b.code_status === 'ready'
+        ? `<p style="margin:6px 0 0;">Payment confirmed. Your validation code: <b style="color:var(--navy); font-size:1.05rem;">${b.code}</b></p>
+           <p class="muted">Enter it in <a href="/lasso/student/profile.html" style="color:var(--navy); font-weight:700;">Profile</a> to activate your subscription.</p>`
+        : `<p class="muted">Status: awaiting payment at the cashier. The cashier will give you your validation code once payment is confirmed.</p>`}
+    </div>`).join('');
+}
+
+async function loadCart() {
+  const r = await apiGet('/cart/list.php');
+  const box = document.getElementById('cartBox');
+  if (!r.success) { box.innerHTML = `<p>${r.message}</p>`; return; }
+  if (!r.items.length) {
+    box.innerHTML = `<div class="empty-state">
+      <p>Your cart is empty.</p>
+      <p class="muted">Add materials from the Store to get started.</p>
+      <a class="btn btn-primary" href="/lasso/student/store.html" style="margin-top:10px; display:inline-flex;">Go to Store</a>
+    </div>`;
+    return;
+  }
+  box.innerHTML = r.items.map(it => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #e5e7eb;">
+      <div><b>${it.title}</b><div class="muted">${it.material_code}</div></div>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span>${peso(it.price)}</span>
+        <button class="btn btn-danger btn-sm" onclick="removeItem(${it.id})">Remove</button>
+      </div>
+    </div>`).join('') +
+    `<div style="display:flex; justify-content:space-between; padding-top:14px; font-weight:800; font-size:1.05rem;">
+      <span>Total</span><span>${peso(r.total)}</span>
+    </div>
+    <button class="btn btn-gold btn-block" style="margin-top:16px;" onclick="checkout()">Checkout</button>`;
+}
+
+async function removeItem(id) {
+  const r = await apiPost('/cart/remove.php', { material_id: id });
+  if (r.success) { toast('Removed', 'success'); refreshCartBadge(); loadCart(); }
+}
+
+async function checkout() {
+  const r = await apiPost('/cart/checkout.php', {});
+  if (!r.success) { toast(r.message, 'error'); return; }
+  showBillingModal(r.billing, true);
+  loadHistory();
+}
+
+/** Renders the printable billing statement modal. Used both right after
+ * checkout (isFresh=true, shows the cashier instructions banner) and when
+ * reprinting from Billing History (isFresh=false, plain reprint). */
+function showBillingModal(b, isFresh) {
+  const rows = b.items.map(i => `<tr><td>${i.title}</td><td style="text-align:right;">${peso(i.price)}</td></tr>`).join('');
+  document.getElementById('modalContent').innerHTML = `
+    <h2>Billing Statement</h2>
+    <p class="muted">${b.billing_code} • ${b.date}</p>
+    <p><b>${b.student_name}</b> — ${b.student_id_number}</p>
+    <table><thead><tr><th>Material</th><th style="text-align:right;">Amount</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td><b>Total</b></td><td style="text-align:right;"><b>${peso(b.total)}</b></td></tr></tfoot>
+    </table>
+    <p class="muted">${b.semester}, AY ${b.academic_year}</p>
+    ${isFresh
+      ? `<div class="alert alert-info" style="margin-top:12px;">Print this statement and present it at the cashier. Your validation code has been transmitted to the cashier's office and will be released once payment is confirmed — then submit it from your Profile page.</div>`
+      : `<div class="alert alert-info" style="margin-top:12px;">Reprinted copy of a previously generated billing statement.</div>`}
+    <div style="display:flex; gap:10px; margin-top:14px;">
+      <button class="btn btn-outline" style="flex:1;" onclick="window.print()">Print</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="closeModal(); loadPending(); loadCart(); refreshCartBadge();">Done</button>
+    </div>
+  `;
+  document.getElementById('modalBackdrop').style.display = 'flex';
+}
+
+let historyCache = [];
+
+async function loadHistory() {
+  const r = await apiGet('/cart/billing_history.php');
+  const body = document.getElementById('historyBody');
+  if (!r.success) { body.innerHTML = `<tr><td colspan="6" class="muted">${r.message}</td></tr>`; return; }
+  historyCache = r.billings.map(b => ({ ...b, student_name: r.student_name, student_id_number: r.student_id_number }));
+
+  if (!historyCache.length) {
+    body.innerHTML = '<tr><td colspan="6" class="muted">No billing statements yet.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = historyCache.map((b, idx) => {
+    const statusTag = b.status === 'paid'
+      ? '<span class="tag tag-active">Paid</span>'
+      : `<span class="tag tag-draft">${b.code_status === 'ready' ? 'Awaiting your code submission' : 'Pending payment'}</span>`;
+    return `
+      <tr>
+        <td>${b.billing_code}</td>
+        <td>${b.created_at}</td>
+        <td>${b.semester}, AY ${b.academic_year}</td>
+        <td>${peso(b.total_amount)}</td>
+        <td>${statusTag}</td>
+        <td><button class="btn btn-outline btn-sm" onclick="printBilling(${idx})">Print</button></td>
+      </tr>`;
+  }).join('');
+}
+
+function printBilling(idx) {
+  const b = historyCache[idx];
+  showBillingModal({
+    billing_code: b.billing_code,
+    student_name: b.student_name,
+    student_id_number: b.student_id_number,
+    items: b.items,
+    total: b.total_amount,
+    semester: b.semester,
+    academic_year: b.academic_year,
+    date: b.created_at,
+  }, false);
+}
+
+function closeModal() { document.getElementById('modalBackdrop').style.display = 'none'; }
+
+init();
+</script>
+</body>
+</html>

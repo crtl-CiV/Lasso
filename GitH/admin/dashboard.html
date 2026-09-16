@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — LASSO Admin</title>
+<link rel="stylesheet" href="/lasso/assets/css/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">LASSO Admin<span class="dot">.</span></div>
+  <nav>
+    <a href="/lasso/admin/dashboard.html" class="active">Dashboard</a>
+    <a href="/lasso/admin/materials.html">Materials</a>
+    <a href="/lasso/admin/users.html">Users</a>
+    <a href="/lasso/admin/sales.html">Sales &amp; Cashier</a>
+    <button onclick="logout('/lasso/admin-login.html')">Logout</button>
+  </nav>
+</div>
+
+<div class="page container">
+  <h1>Dashboard</h1>
+  <div class="grid grid-3" id="statsGrid"></div>
+
+  <div class="card">
+    <h2>Top Materials by Active Subscribers</h2>
+    <table>
+      <thead><tr><th>Material</th><th>Subscribers</th></tr></thead>
+      <tbody id="topMaterialsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="/lasso/assets/js/api.js"></script>
+<script>
+function statCard(label, value) {
+  return `<div class="card"><div class="muted">${label}</div><div style="font-size:1.7rem; font-weight:800; color:var(--navy);">${value}</div></div>`;
+}
+
+async function init() {
+  await requireAuth('admin');
+  const r = await apiGet('/admin/dashboard.php');
+  if (!r.success) { toast(r.message, 'error'); return; }
+  const s = r.stats;
+  document.getElementById('statsGrid').innerHTML =
+    statCard('Active Students', s.total_students) +
+    statCard('Published Materials', s.total_materials) +
+    statCard('Active Subscriptions', s.total_active_subscriptions) +
+    statCard('Total Sales', peso(s.total_sales)) +
+    statCard('Pending Payments', s.pending_payments);
+
+  document.getElementById('topMaterialsBody').innerHTML = r.top_materials.length
+    ? r.top_materials.map(m => `<tr><td>${m.title}</td><td>${m.subscribers}</td></tr>`).join('')
+    : '<tr><td colspan="2" class="muted">No subscriptions yet.</td></tr>';
+}
+init();
+</script>
+</body>
+</html>

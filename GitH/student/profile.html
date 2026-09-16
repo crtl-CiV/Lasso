@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Profile — LASSO</title>
+<link rel="stylesheet" href="/lasso/assets/css/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">LASSO<span class="dot">.</span></div>
+  <nav>
+    <a href="/lasso/student/store.html">Store</a>
+    <a href="/lasso/student/cart.html">Cart<span class="badge-count" id="cartBadge" style="display:none;">0</span></a>
+    <a href="/lasso/student/library.html">Library</a>
+    <a href="/lasso/student/profile.html" class="active">Profile</a>
+    <button onclick="logout()">Logout</button>
+  </nav>
+</div>
+
+<div class="page container" style="max-width:640px;">
+  <h1>Profile</h1>
+
+  <div class="card">
+    <h2>Submit Validation Code</h2>
+    <p class="muted">Once the cashier confirms your payment, submit your validation code here to unlock full access.</p>
+    <div id="valAlert"></div>
+    <form id="valForm" style="display:flex; gap:8px;">
+      <input type="text" id="valCode" placeholder="e.g. VAL-XXXXXXXXXX" style="flex:1;" required>
+      <button class="btn btn-gold" type="submit">Submit</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Account Details</h2>
+    <div id="profAlert"></div>
+    <form id="profForm">
+      <label>Full Name</label>
+      <input type="text" id="full_name">
+      <label>Section</label>
+      <input type="text" id="section">
+      <label>Profile Photo</label>
+      <input type="file" id="profile_photo" accept="image/*">
+      <button class="btn btn-primary" style="margin-top:14px;" type="submit">Save Changes</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Change Password</h2>
+    <div id="pwAlert"></div>
+    <form id="pwForm">
+      <label>Current Password</label>
+      <input type="password" id="current_password" required>
+      <label>New Password</label>
+      <input type="password" id="new_password" required minlength="8">
+      <button class="btn btn-outline" style="margin-top:14px;" type="submit">Update Password</button>
+    </form>
+  </div>
+</div>
+
+<script src="/lasso/assets/js/api.js"></script>
+<script>
+async function init() {
+  const me = await requireAuth('student');
+  document.getElementById('full_name').value = me.full_name;
+  document.getElementById('section').value = me.section;
+  await refreshCartBadge();
+}
+
+async function refreshCartBadge() {
+  const r = await apiGet('/cart/list.php');
+  const badge = document.getElementById('cartBadge');
+  if (r.success && r.items.length) { badge.style.display = 'inline-block'; badge.textContent = r.items.length; }
+  else badge.style.display = 'none';
+}
+
+document.getElementById('valForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const box = document.getElementById('valAlert');
+  const code = document.getElementById('valCode').value.trim();
+  const r = await apiPost('/subscription/validate.php', { code });
+  box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${r.message}</div>`;
+  if (r.success) document.getElementById('valCode').value = '';
+});
+
+document.getElementById('profForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const box = document.getElementById('profAlert');
+  const fd = new FormData();
+  fd.append('full_name', document.getElementById('full_name').value.trim());
+  fd.append('section', document.getElementById('section').value.trim());
+  const photo = document.getElementById('profile_photo').files[0];
+  if (photo) fd.append('profile_photo', photo);
+  const res = await fetch('/lasso/api/auth/update_profile.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+  const r = await res.json();
+  box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${r.success ? 'Profile updated.' : r.message}</div>`;
+});
+
+document.getElementById('pwForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const box = document.getElementById('pwAlert');
+  const current_password = document.getElementById('current_password').value;
+  const new_password = document.getElementById('new_password').value;
+  const r = await apiPost('/auth/change_password.php', { current_password, new_password });
+  box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${r.message}</div>`;
+  if (r.success) e.target.reset();
+});
+
+init();
+</script>
+</body>
+</html>
