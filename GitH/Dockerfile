@@ -13,10 +13,16 @@ RUN apt-get update \
 
 RUN a2enmod rewrite
 
-COPY . /var/www/html/
+# The app's HTML/JS hardcode absolute paths under /lasso/ (from local dev,
+# e.g. http://localhost/lasso/), so it must be served from that subfolder
+# rather than the document root.
+COPY . /var/www/html/lasso/
+
+# Redirect the site root to /lasso/ so visiting the bare domain still works.
+RUN printf '<?php header("Location: /lasso/index.html"); exit;\n' > /var/www/html/index.php
 
 RUN chown -R www-data:www-data /var/www/html \
-    && find /var/www/html/api/uploads -type d -exec chmod 775 {} \;
+    && find /var/www/html/lasso/api/uploads -type d -exec chmod 775 {} \;
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
