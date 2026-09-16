@@ -4,8 +4,12 @@
 # =========================================================
 FROM php:8.3-apache
 
-# pdo_pgsql lets PHP's PDO talk to Supabase's PostgreSQL database
-RUN docker-php-ext-install pdo pdo_pgsql pgsql
+# pdo_pgsql lets PHP's PDO talk to Supabase's PostgreSQL database.
+# libpq-dev provides libpq-fe.h, which pdo_pgsql/pgsql need to compile.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpq-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && docker-php-ext-install pdo pdo_pgsql pgsql
 
 RUN a2enmod rewrite
 
