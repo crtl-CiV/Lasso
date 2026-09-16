@@ -56,7 +56,10 @@ if ($subscribed) {
         $percent = $bodyTotal ? round(count($pagesRead) / $bodyTotal * 100, 2) : 0;
         $stmt = $db->prepare("INSERT INTO progress_tracker (student_id, material_id, pages_read, last_page_read, percent_complete)
                                VALUES (?, ?, ?, ?, ?)
-                               ON DUPLICATE KEY UPDATE pages_read=VALUES(pages_read), last_page_read=VALUES(last_page_read), percent_complete=VALUES(percent_complete)");
+                               ON CONFLICT ON CONSTRAINT uq_progress
+                               DO UPDATE SET pages_read = EXCLUDED.pages_read,
+                                             last_page_read = EXCLUDED.last_page_read,
+                                             percent_complete = EXCLUDED.percent_complete");
         $stmt->execute([$user['id'], $materialId, json_encode($pagesRead), $page, $percent]);
     }
 }

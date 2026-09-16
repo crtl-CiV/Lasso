@@ -108,9 +108,10 @@ if (!$hasPagesNow && !$expectMoreBatches) {
 $code = genCode('LM', 6);
 $stmt = $db->prepare("INSERT INTO instructional_materials
     (material_code, title, description, department_id, program_id, year_level, price, total_pages, non_body_pages, preview_excluded_pages, status, uploaded_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'draft', ?)");
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'draft', ?)
+    RETURNING id");
 $stmt->execute([$code, $title, $description, $departmentId, $programId, $yearLevel, $price, json_encode($nonBodyPages), json_encode($previewExcluded), $admin['id']]);
-$materialId = (int)$db->lastInsertId();
+$materialId = (int)$stmt->fetchColumn();
 
 $coverPath = saveCover($materialId);
 $savedCount = $hasPagesNow ? savePagesBatch($materialId, 0) : 0;

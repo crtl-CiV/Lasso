@@ -19,9 +19,10 @@ try {
     $db->beginTransaction();
 
     $stmt = $db->prepare("INSERT INTO billing_statements (billing_code, student_id, total_amount, semester, academic_year, status)
-                           VALUES (?, ?, ?, ?, ?, 'pending')");
+                           VALUES (?, ?, ?, ?, ?, 'pending')
+                           RETURNING id");
     $stmt->execute([$billingCode, $user['id'], $total, $semester, $ay]);
-    $billingId = (int)$db->lastInsertId();
+    $billingId = (int)$stmt->fetchColumn();
 
     $itemStmt = $db->prepare("INSERT INTO billing_statement_items (billing_id, material_id, price) VALUES (?, ?, ?)");
     foreach ($items as $it) $itemStmt->execute([$billingId, $it['id'], $it['price']]);
