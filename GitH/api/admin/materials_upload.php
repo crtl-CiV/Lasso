@@ -19,6 +19,7 @@
 //       max_file_uploads / post_max_size limits on big documents).
 // =========================================================
 require_once __DIR__ . '/../config/bootstrap.php';
+require_once __DIR__ . '/../config/storage.php';
 $admin = requireAdmin();
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(false, 'Invalid request method.', 405);
 
@@ -32,18 +33,14 @@ function saveCover(int $materialId): ?string {
     if (empty($_FILES['cover_image']) || $_FILES['cover_image']['error'] !== UPLOAD_ERR_OK) return null;
     $mime = mime_content_type($_FILES['cover_image']['tmp_name']);
     if (!isset($allowedPage[$mime])) return null;
-    $dir = __DIR__ . '/../uploads/covers/';
-    if (!is_dir($dir)) mkdir($dir, 0775, true);
-    $fn = 'cover_' . $materialId . '_' . time() . '.' . $allowedPage[$mime];
-    move_uploaded_file($_FILES['cover_image']['tmp_name'], $dir . $fn);
-    return 'uploads/covers/' . $fn;
+    $objectPath = 'covers/cover_' . $materialId . '_' . time() . '.' . $allowedPage[$mime];
+    $ok = uploadToStorage(STORAGE_PUBLIC_BUCKET, $objectPath, $_FILES['cover_image']['tmp_name'], $mime);
+    return $ok ? $objectPath : null;
 }
 
 function savePagesBatch(int $materialId, int $startingAt): int {
     global $allowedPage;
     if (empty($_FILES['pages']) || empty($_FILES['pages']['name'][0])) return 0;
-    $dir = __DIR__ . '/../uploads/materials/' . $materialId . '/';
-    if (!is_dir($dir)) mkdir($dir, 0775, true);
     $count = count($_FILES['pages']['name']);
     $saved = 0;
     for ($i = 0; $i < $count; $i++) {
@@ -51,8 +48,12 @@ function savePagesBatch(int $materialId, int $startingAt): int {
         $mime = mime_content_type($_FILES['pages']['tmp_name'][$i]);
         if (!isset($allowedPage[$mime])) continue;
         $saved++;
-        $fn = 'page_' . ($startingAt + $saved) . '.' . $allowedPage[$mime];
-        move_uploaded_file($_FILES['pages']['tmp_name'][$i], $dir . $fn);
+        $objectPath = $materialId . '/page_' . ($startingAt + $saved) . '.' . $allowedPage[$mime];
+        if (uploadToStorage(STORAGE_MATERIALS_BUCKET, $objectPath, $_FILES['pages']['tmp_name'][$i], $mime)) {
+            // uploaded successfully
+        } else {
+            $saved--; // upload failed, don't count this page
+        }
     }
     return $saved;
 }

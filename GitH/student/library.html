@@ -45,7 +45,7 @@ async function refreshCartBadge() {
 
 function libCard(m) {
   const tagClass = m.status === 'active' ? 'tag-active' : 'tag-expired';
-  const cover = m.cover_image ? `<img src="/lasso/api/${m.cover_image}" alt="">` : m.title;
+  const cover = m.cover_image ? `<img src="${SUPABASE_PUBLIC_URL}${m.cover_image}" alt="">` : m.title;
   return `
     <div class="mcard">
       <div class="cover" onclick="openReader(${m.material_id})" style="cursor:pointer;">${cover}</div>

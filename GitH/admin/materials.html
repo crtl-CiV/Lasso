@@ -72,8 +72,10 @@ function materialAdminCard(m) {
       ? `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'unpromote')">Unpromote</button>`
       : `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'promote')">Promote</button>`;
   }
-  if (m.status === 'trashed') actions += `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'restore')">Restore</button>`;
-  else actions += `<button class="btn btn-danger btn-sm" onclick="doAction(${m.id},'trash')">Trash</button>`;
+  if (m.status === 'trashed') {
+    actions += `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'restore')">Restore</button>`;
+    actions += `<button class="btn btn-danger btn-sm" onclick="confirmDelete(${m.id})">Delete Permanently</button>`;
+  } else actions += `<button class="btn btn-danger btn-sm" onclick="doAction(${m.id},'trash')">Trash</button>`;
 
   return `
     <div class="mcard">
@@ -97,6 +99,12 @@ async function loadMaterials() {
   const grid = document.getElementById('grid');
   if (!r.success) { grid.innerHTML = `<p>${r.message}</p>`; return; }
   grid.innerHTML = r.materials.length ? r.materials.map(materialAdminCard).join('') : '<div class="empty-state">No materials here.</div>';
+}
+
+function confirmDelete(id) {
+  if (confirm('This will permanently delete this material and its files. This cannot be undone. Continue?')) {
+    doAction(id, 'delete');
+  }
 }
 
 async function doAction(id, action) {

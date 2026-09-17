@@ -72,7 +72,8 @@ async function loadUsers() {
           <td>
             ${s.status === 'active'
               ? `<button class="btn btn-danger btn-sm" onclick="userAction(${s.id},'student','trash')">Trash</button>`
-              : `<button class="btn btn-outline btn-sm" onclick="userAction(${s.id},'student','restore')">Restore</button>`}
+              : `<button class="btn btn-outline btn-sm" onclick="userAction(${s.id},'student','restore')">Restore</button>
+                 <button class="btn btn-danger btn-sm" onclick="confirmUserDelete(${s.id},'student')">Delete Permanently</button>`}
           </td>
         </tr>`).join('') || '<tr><td colspan="7" class="muted">No students yet.</td></tr>'}</tbody>`;
   } else {
@@ -86,9 +87,16 @@ async function loadUsers() {
           <td>
             ${a.status === 'active'
               ? `<button class="btn btn-danger btn-sm" onclick="userAction(${a.id},'admin','trash')">Trash</button>`
-              : `<button class="btn btn-outline btn-sm" onclick="userAction(${a.id},'admin','restore')">Restore</button>`}
+              : `<button class="btn btn-outline btn-sm" onclick="userAction(${a.id},'admin','restore')">Restore</button>
+                 <button class="btn btn-danger btn-sm" onclick="confirmUserDelete(${a.id},'admin')">Delete Permanently</button>`}
           </td>
         </tr>`).join('') || '<tr><td colspan="5" class="muted">No administrators yet.</td></tr>'}</tbody>`;
+  }
+}
+
+function confirmUserDelete(id, type) {
+  if (confirm('This will permanently delete this account and its files. This cannot be undone. Continue?')) {
+    userAction(id, type, 'delete');
   }
 }
 

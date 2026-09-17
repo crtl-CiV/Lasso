@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/bootstrap.php';
+require_once __DIR__ . '/../config/storage.php';
 $user = requireStudent();
 $db = getDB();
 
@@ -29,18 +30,22 @@ if (!$subscribed) {
     respond(false, 'Page out of range.', 404);
 }
 
-// File naming convention: uploads/materials/{material_id}/page_{n}.jpg
-$dir = __DIR__ . '/../uploads/materials/' . $materialId . '/';
-$candidates = [$dir . "page_$page.jpg", $dir . "page_$page.png", $dir . "page_$page.webp"];
-$file = null;
-foreach ($candidates as $c) if (is_file($c)) { $file = $c; break; }
+// File naming convention: {material_id}/page_{n}.jpg (in the private bucket)
+$extensions = ['jpg', 'png', 'webp'];
+$result = null;
+foreach ($extensions as $ext) {
+    $objectPath = $materialId . '/page_' . $page . '.' . $ext;
+    $result = downloadFromStorage(STORAGE_MATERIALS_BUCKET, $objectPath);
+    if ($result) break;
+}
 
-if (!$file) {
+if (!$result) {
     http_response_code(404);
     header('Content-Type: text/plain');
     echo 'Page image missing.';
     exit;
 }
+[$fileBytes, $fileMime] = $result;
 
 // Log progress for subscribed students (body pages only)
 if ($subscribed) {
@@ -65,10 +70,10 @@ if ($subscribed) {
 }
 
 // Anti-piracy headers: no caching, inline only, no content-disposition download
-header('Content-Type: ' . mime_content_type($file));
+header('Content-Type: ' . $fileMime);
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('X-Frame-Options: SAMEORIGIN');
 header('Content-Disposition: inline');
-readfile($file);
+echo $fileBytes;
 exit;

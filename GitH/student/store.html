@@ -68,7 +68,7 @@ async function refreshCartBadge() {
 }
 
 function materialCard(m) {
-  const cover = m.cover_image ? `<img src="/lasso/api/${m.cover_image}" alt="">` : m.title;
+  const cover = m.cover_image ? `<img src="${SUPABASE_PUBLIC_URL}${m.cover_image}" alt="">` : m.title;
   let actionBtn;
   if (m.is_subscribed) actionBtn = `<a href="/lasso/student/library.html" class="btn btn-outline btn-sm">In Library</a>`;
   else if (m.in_cart) actionBtn = `<button class="btn btn-outline btn-sm" disabled>In Cart</button>`;

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/bootstrap.php';
+require_once __DIR__ . '/../config/storage.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(false, 'Invalid request method.', 405);
 
@@ -37,11 +38,10 @@ function saveIdPhoto(string $field, string $studentId): ?string {
     $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
     $mime = mime_content_type($_FILES[$field]['tmp_name']);
     if (!isset($allowed[$mime])) return null;
-    $dir = __DIR__ . '/../uploads/ids/';
-    if (!is_dir($dir)) mkdir($dir, 0775, true);
     $filename = preg_replace('/[^A-Za-z0-9_-]/', '_', $studentId) . '_' . $field . '_' . time() . '.' . $allowed[$mime];
-    move_uploaded_file($_FILES[$field]['tmp_name'], $dir . $filename);
-    return 'uploads/ids/' . $filename;
+    $objectPath = 'ids/' . $filename;
+    $ok = uploadToStorage(STORAGE_PUBLIC_BUCKET, $objectPath, $_FILES[$field]['tmp_name'], $mime);
+    return $ok ? $objectPath : null;
 }
 
 $idFront = saveIdPhoto('id_photo_front', $studentId);

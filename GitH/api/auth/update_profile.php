@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/bootstrap.php';
+require_once __DIR__ . '/../config/storage.php';
 $user = requireStudent();
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(false, 'Invalid request method.', 405);
 
@@ -12,11 +13,10 @@ if (!empty($_FILES['profile_photo']) && $_FILES['profile_photo']['error'] === UP
     $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
     $mime = mime_content_type($_FILES['profile_photo']['tmp_name']);
     if (isset($allowed[$mime])) {
-        $dir = __DIR__ . '/../uploads/ids/';
-        if (!is_dir($dir)) mkdir($dir, 0775, true);
-        $filename = 'profile_' . $user['id'] . '_' . time() . '.' . $allowed[$mime];
-        move_uploaded_file($_FILES['profile_photo']['tmp_name'], $dir . $filename);
-        $photoPath = 'uploads/ids/' . $filename;
+        $objectPath = 'profile/profile_' . $user['id'] . '_' . time() . '.' . $allowed[$mime];
+        if (uploadToStorage(STORAGE_PUBLIC_BUCKET, $objectPath, $_FILES['profile_photo']['tmp_name'], $mime)) {
+            $photoPath = $objectPath;
+        }
     }
 }
 

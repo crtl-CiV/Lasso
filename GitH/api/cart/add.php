@@ -15,7 +15,8 @@ $stmt = $db->prepare("SELECT id FROM subscriptions WHERE student_id=? AND materi
 $stmt->execute([$user['id'], $materialId]);
 if ($stmt->fetch()) respond(false, 'You already have an active subscription to this material.', 409);
 
-$stmt = $db->prepare("INSERT IGNORE INTO cart_items (student_id, material_id) VALUES (?, ?)");
+$stmt = $db->prepare("INSERT INTO cart_items (student_id, material_id) VALUES (?, ?)
+                       ON CONFLICT ON CONSTRAINT uq_cart DO NOTHING");
 $stmt->execute([$user['id'], $materialId]);
 
 respond(true, ['message' => 'Added to cart.']);
