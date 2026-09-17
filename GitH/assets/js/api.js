@@ -7,7 +7,7 @@ const API_BASE = '/lasso/api';
 // profile photos). Fill in your project's URL from Supabase -> Settings -> API.
 // Cover/photo paths returned by the API (e.g. 'covers/cover_1_123.jpg') get
 // appended to this to form the full image URL.
-const SUPABASE_PUBLIC_URL = 'https://YOUR-PROJECT-REF.supabase.co/storage/v1/object/public/lasso-public/';
+const SUPABASE_PUBLIC_URL = 'https://rghdjktjaxatbxybtwsu.supabase.co/storage/v1/object/public/lasso-public/';
 
 async function apiGet(path) {
   const res = await fetch(API_BASE + path, { credentials: 'same-origin' });
