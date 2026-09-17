@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LASSO — Student Login</title>
-<link rel="stylesheet" href="/lasso/assets/css/style.css">
+<link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
 <div class="auth-shell">
@@ -19,11 +19,11 @@
       <input type="password" id="password" required placeholder="••••••••">
       <button class="btn btn-primary btn-block" style="margin-top:18px;" type="submit">Log In</button>
     </form>
-    <p class="switch-link">No account yet? <a href="/lasso/register.html" style="color:var(--navy); font-weight:700;">Register</a></p>
-    <p class="switch-link"><a href="/lasso/admin-login.html" style="color:var(--muted);">Administrator login</a></p>
+    <p class="switch-link">No account yet? <a href="/register.html" style="color:var(--navy); font-weight:700;">Register</a></p>
+    <p class="switch-link"><a href="/admin-login.html" style="color:var(--muted);">Administrator login</a></p>
   </div>
 </div>
-<script src="/lasso/assets/js/api.js"></script>
+<script src="/assets/js/api.js"></script>
 <script>
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -33,7 +33,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   box.innerHTML = '';
   const r = await apiPost('/auth/login.php', { identifier, password, role: 'student' });
   if (r.success) {
-    window.location.href = '/lasso/student/store.html';
+    window.location.href = '/student/store.html';
   } else {
     box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
   }

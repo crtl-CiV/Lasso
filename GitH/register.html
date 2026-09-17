@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LASSO — Student Registration</title>
-<link rel="stylesheet" href="/lasso/assets/css/style.css">
+<link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
 <div class="auth-shell">
@@ -60,10 +60,10 @@
 
       <button class="btn btn-primary btn-block" style="margin-top:18px;" type="submit">Register</button>
     </form>
-    <p class="switch-link">Already have an account? <a href="/lasso/index.html" style="color:var(--navy); font-weight:700;">Log in</a></p>
+    <p class="switch-link">Already have an account? <a href="/index.html" style="color:var(--navy); font-weight:700;">Log in</a></p>
   </div>
 </div>
-<script src="/lasso/assets/js/api.js"></script>
+<script src="/assets/js/api.js"></script>
 <script>
 let programs = [];
 
@@ -105,11 +105,11 @@ document.getElementById('regForm').addEventListener('submit', async (e) => {
   fd.append('id_photo_front', document.getElementById('id_photo_front').files[0]);
   fd.append('id_photo_back', document.getElementById('id_photo_back').files[0]);
 
-  const res = await fetch('/lasso/api/auth/register.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+  const res = await fetch('/api/auth/register.php', { method: 'POST', body: fd, credentials: 'same-origin' });
   const r = await res.json();
   if (r.success) {
     box.innerHTML = `<div class="alert alert-success">${r.message}</div>`;
-    setTimeout(() => window.location.href = '/lasso/index.html', 1200);
+    setTimeout(() => window.location.href = '/index.html', 1200);
   } else {
     box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
   }

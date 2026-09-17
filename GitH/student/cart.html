@@ -4,16 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cart — LASSO</title>
-<link rel="stylesheet" href="/lasso/assets/css/style.css">
+<link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
 <div class="topbar">
   <div class="brand">LASSO<span class="dot">.</span></div>
   <nav>
-    <a href="/lasso/student/store.html">Store</a>
-    <a href="/lasso/student/cart.html" class="active">Cart<span class="badge-count" id="cartBadge" style="display:none;">0</span></a>
-    <a href="/lasso/student/library.html">Library</a>
-    <a href="/lasso/student/profile.html">Profile</a>
+    <a href="/student/store.html">Store</a>
+    <a href="/student/cart.html" class="active">Cart<span class="badge-count" id="cartBadge" style="display:none;">0</span></a>
+    <a href="/student/library.html">Library</a>
+    <a href="/student/profile.html">Profile</a>
     <button onclick="logout()">Logout</button>
   </nav>
 </div>
@@ -39,7 +39,7 @@
   <div class="modal" id="modalContent"></div>
 </div>
 
-<script src="/lasso/assets/js/api.js"></script>
+<script src="/assets/js/api.js"></script>
 <script>
 async function init() {
   await requireAuth('student');
@@ -65,7 +65,7 @@ async function loadPending() {
       <b>Billing #${b.billing_code}</b> — ${peso(b.total_amount)}
       ${b.code_status === 'ready'
         ? `<p style="margin:6px 0 0;">Payment confirmed. Your validation code: <b style="color:var(--navy); font-size:1.05rem;">${b.code}</b></p>
-           <p class="muted">Enter it in <a href="/lasso/student/profile.html" style="color:var(--navy); font-weight:700;">Profile</a> to activate your subscription.</p>`
+           <p class="muted">Enter it in <a href="/student/profile.html" style="color:var(--navy); font-weight:700;">Profile</a> to activate your subscription.</p>`
         : `<p class="muted">Status: awaiting payment at the cashier. The cashier will give you your validation code once payment is confirmed.</p>`}
     </div>`).join('');
 }
@@ -78,7 +78,7 @@ async function loadCart() {
     box.innerHTML = `<div class="empty-state">
       <p>Your cart is empty.</p>
       <p class="muted">Add materials from the Store to get started.</p>
-      <a class="btn btn-primary" href="/lasso/student/store.html" style="margin-top:10px; display:inline-flex;">Go to Store</a>
+      <a class="btn btn-primary" href="/student/store.html" style="margin-top:10px; display:inline-flex;">Go to Store</a>
     </div>`;
     return;
   }

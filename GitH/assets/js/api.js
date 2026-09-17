@@ -1,13 +1,13 @@
 // =========================================================
 // LASSO — shared fetch helper for all pages
 // =========================================================
-const API_BASE = '/lasso/api';
+const API_BASE = '/api';
 
 // Base URL for files stored in Supabase's public bucket (covers, ID photos,
 // profile photos). Fill in your project's URL from Supabase -> Settings -> API.
 // Cover/photo paths returned by the API (e.g. 'covers/cover_1_123.jpg') get
 // appended to this to form the full image URL.
-const SUPABASE_PUBLIC_URL = 'https://rghdjktjaxatbxybtwsu.supabase.co/storage/v1/object/public/lasso-public/';
+const SUPABASE_PUBLIC_URL = 'https://YOUR-PROJECT-REF.supabase.co/storage/v1/object/public/lasso-public/';
 
 async function apiGet(path) {
   const res = await fetch(API_BASE + path, { credentials: 'same-origin' });
@@ -58,7 +58,7 @@ function toast(msg, type = 'info') {
 async function requireAuth(role) {
   const r = await apiGet('/auth/me.php');
   if (!r.success || (role && r.user.role !== role)) {
-    window.location.href = role === 'admin' ? '/lasso/admin-login.html' : '/lasso/index.html';
+    window.location.href = role === 'admin' ? '/admin-login.html' : '/index.html';
     return null;
   }
   return r.user;
@@ -66,7 +66,7 @@ async function requireAuth(role) {
 
 async function logout(redirectTo) {
   await apiPost('/auth/logout.php', {});
-  window.location.href = redirectTo || '/lasso/index.html';
+  window.location.href = redirectTo || '/index.html';
 }
 
 // Basic piracy-deterrence measures on any page that includes this file

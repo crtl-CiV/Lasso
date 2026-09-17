@@ -4,17 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard — LASSO Admin</title>
-<link rel="stylesheet" href="/lasso/assets/css/style.css">
+<link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
 <div class="topbar">
   <div class="brand">LASSO Admin<span class="dot">.</span></div>
   <nav>
-    <a href="/lasso/admin/dashboard.html" class="active">Dashboard</a>
-    <a href="/lasso/admin/materials.html">Materials</a>
-    <a href="/lasso/admin/users.html">Users</a>
-    <a href="/lasso/admin/sales.html">Sales &amp; Cashier</a>
-    <button onclick="logout('/lasso/admin-login.html')">Logout</button>
+    <a href="/admin/dashboard.html" class="active">Dashboard</a>
+    <a href="/admin/materials.html">Materials</a>
+    <a href="/admin/users.html">Users</a>
+    <a href="/admin/sales.html">Sales &amp; Cashier</a>
+    <button onclick="logout('/admin-login.html')">Logout</button>
   </nav>
 </div>
 
@@ -31,7 +31,7 @@
   </div>
 </div>
 
-<script src="/lasso/assets/js/api.js"></script>
+<script src="/assets/js/api.js"></script>
 <script>
 function statCard(label, value) {
   return `<div class="card"><div class="muted">${label}</div><div style="font-size:1.7rem; font-weight:800; color:var(--navy);">${value}</div></div>`;

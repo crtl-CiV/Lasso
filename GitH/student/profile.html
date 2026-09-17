@@ -4,16 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Profile — LASSO</title>
-<link rel="stylesheet" href="/lasso/assets/css/style.css">
+<link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
 <div class="topbar">
   <div class="brand">LASSO<span class="dot">.</span></div>
   <nav>
-    <a href="/lasso/student/store.html">Store</a>
-    <a href="/lasso/student/cart.html">Cart<span class="badge-count" id="cartBadge" style="display:none;">0</span></a>
-    <a href="/lasso/student/library.html">Library</a>
-    <a href="/lasso/student/profile.html" class="active">Profile</a>
+    <a href="/student/store.html">Store</a>
+    <a href="/student/cart.html">Cart<span class="badge-count" id="cartBadge" style="display:none;">0</span></a>
+    <a href="/student/library.html">Library</a>
+    <a href="/student/profile.html" class="active">Profile</a>
     <button onclick="logout()">Logout</button>
   </nav>
 </div>
@@ -58,7 +58,7 @@
   </div>
 </div>
 
-<script src="/lasso/assets/js/api.js"></script>
+<script src="/assets/js/api.js"></script>
 <script>
 async function init() {
   const me = await requireAuth('student');
@@ -91,7 +91,7 @@ document.getElementById('profForm').addEventListener('submit', async (e) => {
   fd.append('section', document.getElementById('section').value.trim());
   const photo = document.getElementById('profile_photo').files[0];
   if (photo) fd.append('profile_photo', photo);
-  const res = await fetch('/lasso/api/auth/update_profile.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+  const res = await fetch('/api/auth/update_profile.php', { method: 'POST', body: fd, credentials: 'same-origin' });
   const r = await res.json();
   box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${r.success ? 'Profile updated.' : r.message}</div>`;
 });
