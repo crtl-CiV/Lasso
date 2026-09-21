@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Students — LASSO Cashier</title>
+<link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">LASSO Cashier<span class="dot">.</span></div>
+  <nav>
+    <a href="/cashier/dashboard.html">Billing</a>
+    <a href="/cashier/students.html" class="active">Students</a>
+    <button onclick="logout('/index.html')">Logout</button>
+  </nav>
+</div>
+
+<div class="page container">
+  <h1>Registered Students</h1>
+  <p class="muted">Read-only — for account changes, please refer the student to an administrator.</p>
+
+  <div class="card">
+    <table id="studentsTable"></table>
+  </div>
+</div>
+
+<div id="modalBackdrop" class="modal-backdrop" style="display:none;">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script src="/assets/js/api.js"></script>
+<script>
+async function init() {
+  await requireAuth('cashier');
+  await loadStudents();
+}
+
+async function loadStudents() {
+  const r = await apiGet('/admin/users_list.php?type=students');
+  const table = document.getElementById('studentsTable');
+  if (!r.success) { table.innerHTML = `<tr><td>${r.message}</td></tr>`; return; }
+
+  table.innerHTML = `<thead><tr><th>Student ID</th><th>Name</th><th>Program</th><th>Year/Section</th><th>Active Subs</th><th>Status</th><th></th></tr></thead>
+    <tbody>${r.students.map(s => `
+      <tr>
+        <td>${s.student_id_number}</td>
+        <td>${s.full_name}<div class="muted">${s.university_email}</div></td>
+        <td>${s.program_name || '—'}</td>
+        <td>${s.year_level} - ${s.section}</td>
+        <td>${s.active_subscriptions}</td>
+        <td><span class="tag ${s.status === 'active' ? 'tag-active' : 'tag-trashed'}">${s.status}</span></td>
+        <td><button class="btn btn-outline btn-sm" onclick="viewSubscriptions(${s.id}, '${s.full_name.replace(/'/g, "\\'")}')">View Subscriptions</button></td>
+      </tr>`).join('') || '<tr><td colspan="7" class="muted">No students yet.</td></tr>'}</tbody>`;
+}
+
+async function viewSubscriptions(studentId, name) {
+  const r = await apiGet(`/admin/subscription_status.php?student_id=${studentId}`);
+  const rows = r.success ? r.subscriptions : [];
+  document.getElementById('modalContent').innerHTML = `
+    <h2>${name}'s Subscriptions</h2>
+    <table>
+      <thead><tr><th>Material</th><th>Term Count</th><th>Start</th><th>Expiry</th><th>Status</th></tr></thead>
+      <tbody>${rows.length ? rows.map(s => `
+        <tr>
+          <td>${s.title}<div class="muted">${s.material_code}</div></td>
+          <td>${s.semester_count}</td>
+          <td>${s.start_date}</td>
+          <td>${s.expiry_date}</td>
+          <td><span class="tag ${s.status === 'active' ? 'tag-active' : 'tag-trashed'}">${s.status}</span></td>
+        </tr>`).join('') : '<tr><td colspan="5" class="muted">No subscriptions yet.</td></tr>'}</tbody>
+    </table>
+    <div style="margin-top:14px;">
+      <button class="btn btn-outline" style="width:100%;" onclick="closeModal()">Close</button>
+    </div>`;
+  document.getElementById('modalBackdrop').style.display = 'flex';
+}
+
+function closeModal() { document.getElementById('modalBackdrop').style.display = 'none'; }
+document.getElementById('modalBackdrop').addEventListener('click', (e) => { if (e.target.id === 'modalBackdrop') closeModal(); });
+
+init();
+</script>
+</body>
+</html>

@@ -6,7 +6,7 @@
 // student pays -> cashier confirms -> cashier gives the student the code
 // -> student enters it themselves to activate the subscription.
 require_once __DIR__ . '/../config/bootstrap.php';
-requireAdmin();
+$staff = requireStaff(); // admin or cashier can confirm payments
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(false, 'Invalid request method.', 405);
 
 $in = jsonInput();
@@ -28,6 +28,22 @@ $db->prepare("UPDATE validation_codes SET status='ready' WHERE billing_id=?")->e
 $stmt = $db->prepare("SELECT code FROM validation_codes WHERE billing_id = ?");
 $stmt->execute([$billing['id']]);
 $code = $stmt->fetchColumn();
+
+// Notify the admin that a cashier (or admin) just processed this payment.
+$stmt = $db->prepare("SELECT m.title FROM billing_statement_items bi
+                       JOIN instructional_materials m ON m.id = bi.material_id
+                       WHERE bi.billing_id = ?");
+$stmt->execute([$billing['id']]);
+$titles = $stmt->fetchAll(PDO::FETCH_COLUMN);
+$titleList = $titles ? implode(', ', $titles) : 'their billing statement';
+
+$message = "{$billing['full_name']} ({$billing['student_id_number']}) paid for {$titleList}. "
+         . "Validation code {$code} was released by " . ($staff['role'] === 'cashier' ? 'cashier' : 'admin')
+         . " {$staff['full_name']}.";
+
+$db->prepare("INSERT INTO notifications (type, message, student_id, billing_id, cashier_id)
+              VALUES ('payment_confirmed', ?, ?, ?, ?)")
+   ->execute([$message, $billing['student_id'], $billing['id'], $staff['id']]);
 
 respond(true, [
     'message' => 'Payment confirmed.',

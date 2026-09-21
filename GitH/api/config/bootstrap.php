@@ -47,6 +47,14 @@ function requireAdmin(): array {
     return $_SESSION['user'];
 }
 
+/** Allows either an admin or a cashier — for the handful of endpoints both roles share. */
+function requireStaff(): array {
+    if (empty($_SESSION['user']) || !in_array($_SESSION['user']['role'], ['admin', 'cashier'], true)) {
+        respond(false, 'You must be logged in as staff.', 401);
+    }
+    return $_SESSION['user'];
+}
+
 function genCode(string $prefix, int $len = 8): string {
     $chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     $s = '';

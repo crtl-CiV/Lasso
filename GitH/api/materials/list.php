@@ -11,12 +11,13 @@ $programId = (int)($_GET['program_id'] ?? 0);
 // each repeated value below gets its own distinct placeholder name.
 $sql = "SELECT m.id, m.material_code, m.title, m.description, m.price, m.cover_image,
                m.total_pages, m.is_promoted, m.created_at,
-               d.name AS department_name, p.name AS program_name,
+               d.name AS department_name, p.name AS program_name, au.name AS author_name,
                EXISTS(SELECT 1 FROM subscriptions s WHERE s.student_id = :sid1 AND s.material_id = m.id AND s.status='active') AS is_subscribed,
                EXISTS(SELECT 1 FROM cart_items c WHERE c.student_id = :sid2 AND c.material_id = m.id) AS in_cart
         FROM instructional_materials m
         LEFT JOIN college_departments d ON d.id = m.department_id
         LEFT JOIN college_programs p ON p.id = m.program_id
+        LEFT JOIN authors au ON au.id = m.author_id
         WHERE m.status = 'published'";
 $params = ['sid1' => $user['id'], 'sid2' => $user['id']];
 

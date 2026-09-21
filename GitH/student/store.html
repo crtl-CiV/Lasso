@@ -82,7 +82,7 @@ function materialCard(m) {
       </div>
       <div class="body">
         <div class="title">${m.title}</div>
-        <div class="meta">${m.material_code} • ${m.program_name || 'General'}</div>
+        <div class="meta">by ${m.author_name || "Unknown"} • ${m.material_code} • ${m.program_name || 'General'}</div>
         <div class="price">${peso(m.price)}</div>
       </div>
       <div class="actions">

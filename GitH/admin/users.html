@@ -14,7 +14,8 @@
     <a href="/admin/materials.html">Materials</a>
     <a href="/admin/users.html" class="active">Users</a>
     <a href="/admin/sales.html">Sales &amp; Cashier</a>
-    <button onclick="logout('/admin-login.html')">Logout</button>
+    <div id="notifBell" style="position:relative; margin-right:6px;"></div>
+    <button onclick="logout('/index.html')">Logout</button>
   </nav>
 </div>
 
@@ -44,6 +45,7 @@ let currentType = 'students';
 
 async function init() {
   await requireAuth('admin');
+  initNotificationBell('notifBell');
   await loadUsers();
 }
 
@@ -77,11 +79,13 @@ async function loadUsers() {
           </td>
         </tr>`).join('') || '<tr><td colspan="7" class="muted">No students yet.</td></tr>'}</tbody>`;
   } else {
-    table.innerHTML = `<thead><tr><th>Admin ID</th><th>Name</th><th>Position</th><th>Status</th><th></th></tr></thead>
+    table.innerHTML = `<thead><tr><th>Admin ID</th><th>Name</th><th>Email</th><th>Role</th><th>Position</th><th>Status</th><th></th></tr></thead>
       <tbody>${r.admins.map(a => `
         <tr>
           <td>${a.admin_id}</td>
           <td>${a.full_name}</td>
+          <td>${a.email || '—'}</td>
+          <td><span class="tag ${a.role === 'admin' ? 'tag-active' : 'tag-draft'}">${a.role}</span></td>
           <td>${a.position}</td>
           <td><span class="tag ${a.status === 'active' ? 'tag-active' : 'tag-trashed'}">${a.status}</span></td>
           <td>
@@ -90,7 +94,7 @@ async function loadUsers() {
               : `<button class="btn btn-outline btn-sm" onclick="userAction(${a.id},'admin','restore')">Restore</button>
                  <button class="btn btn-danger btn-sm" onclick="confirmUserDelete(${a.id},'admin')">Delete Permanently</button>`}
           </td>
-        </tr>`).join('') || '<tr><td colspan="5" class="muted">No administrators yet.</td></tr>'}</tbody>`;
+        </tr>`).join('') || '<tr><td colspan="7" class="muted">No administrators yet.</td></tr>'}</tbody>`;
   }
 }
 
@@ -108,11 +112,17 @@ async function userAction(id, type, action) {
 
 function openNewAdminModal() {
   document.getElementById('modalContent').innerHTML = `
-    <h2>Register Admin Account</h2>
+    <h2>Register Admin/Cashier Account</h2>
     <form id="newAdminForm">
       <label>Admin ID</label><input type="text" id="na_id" required>
+      <label>Email</label><input type="email" id="na_email" required placeholder="e.g. name@example.com">
       <label>Full Name</label><input type="text" id="na_name" required>
       <label>Position</label><input type="text" id="na_position" required>
+      <label>Role</label>
+      <select id="na_role">
+        <option value="admin">Admin</option>
+        <option value="cashier">Cashier</option>
+      </select>
       <label>Password</label><input type="password" id="na_password" minlength="8" required>
       <div id="naAlert"></div>
       <div style="display:flex; gap:10px; margin-top:14px;">
@@ -126,8 +136,10 @@ function openNewAdminModal() {
     e.preventDefault();
     const r = await apiPost('/admin/register_admin.php', {
       admin_id: document.getElementById('na_id').value.trim(),
+      email: document.getElementById('na_email').value.trim(),
       full_name: document.getElementById('na_name').value.trim(),
       position: document.getElementById('na_position').value.trim(),
+      role: document.getElementById('na_role').value,
       password: document.getElementById('na_password').value,
     });
     const box = document.getElementById('naAlert');

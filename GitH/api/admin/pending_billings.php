@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/bootstrap.php';
-requireAdmin();
+requireStaff();
 $db = getDB();
 
 $rows = $db->query("SELECT b.billing_code, b.total_amount, b.semester, b.academic_year, b.created_at,

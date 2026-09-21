@@ -19,8 +19,8 @@ if (!$studentId || !$email || !$password || !$fullName || !$departmentId || !$pr
 if (strlen($password) < 8) {
     respond(false, 'Password must be at least 8 characters.', 422);
 }
-if (!str_ends_with(strtolower($email), '.edu.ph') && !str_ends_with(strtolower($email), '.edu')) {
-    // Soft check only — adjust or remove to match your actual university domain.
+if (!str_ends_with(strtolower($email), '@students.isatu.edu.ph')) {
+    respond(false, 'Please register using your official @students.isatu.edu.ph email.', 422);
 }
 
 $db = getDB();

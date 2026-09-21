@@ -55,10 +55,24 @@ $rows = $stmt->fetchAll();
 $totalSubs = (int)array_sum(array_column($rows, 'total_subscriptions'));
 $totalRevenue = array_sum(array_map('floatval', array_column($rows, 'total_revenue')));
 
+// Author revenue/ranking — tied to CURRENTLY ACTIVE subscriptions only,
+// so both the count and revenue here drop as subscriptions expire (unlike
+// the historical, all-time totals above).
+$authorRows = $db->query("SELECT au.name AS author_name,
+                                  COUNT(*) AS active_subscriptions,
+                                  COALESCE(SUM(bi.price),0) AS active_revenue
+                           FROM subscriptions sub
+                           JOIN instructional_materials m ON m.id = sub.material_id
+                           JOIN authors au ON au.id = m.author_id
+                           LEFT JOIN billing_statement_items bi ON bi.billing_id = sub.billing_id AND bi.material_id = sub.material_id
+                           WHERE sub.status = 'active' AND sub.expiry_date >= CURRENT_DATE
+                           GROUP BY au.id ORDER BY active_subscriptions DESC")->fetchAll();
+
 respond(true, [
     'group_by' => $groupBy,
     'report' => $rows,
     'summary' => ['total_subscriptions' => $totalSubs, 'total_revenue' => $totalRevenue],
+    'author_ranking' => $authorRows,
     'filters_applied' => [
         'material_id' => $materialId ?: null,
         'department_id' => $departmentId ?: null,

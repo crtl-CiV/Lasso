@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Billing — LASSO Cashier</title>
+<link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">LASSO Cashier<span class="dot">.</span></div>
+  <nav>
+    <a href="/cashier/dashboard.html" class="active">Billing</a>
+    <a href="/cashier/students.html">Students</a>
+    <button onclick="logout('/index.html')">Logout</button>
+  </nav>
+</div>
+
+<div class="page container">
+  <h1>Confirm Payment</h1>
+  <p class="muted">Enter the billing code presented by the student to release their validation code.</p>
+  <div class="card">
+    <div id="cashierAlert"></div>
+    <form id="cashierForm" style="display:flex; gap:8px;">
+      <input type="text" id="billingCode" placeholder="Billing code, e.g. BS-XXXXXXXX" style="flex:1;" required>
+      <button class="btn btn-gold" type="submit">Confirm Payment</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Pending Payments</h2>
+    <table>
+      <thead><tr><th>Billing Code</th><th>Student</th><th>Amount</th><th>Term</th><th>Code Status</th><th>Validation Code</th></tr></thead>
+      <tbody id="pendingBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="/assets/js/api.js"></script>
+<script>
+async function init() {
+  await requireAuth('cashier');
+  await loadPending();
+}
+
+document.getElementById('cashierForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const box = document.getElementById('cashierAlert');
+  const billing_code = document.getElementById('billingCode').value.trim();
+  const r = await apiPost('/admin/confirm_payment.php', { billing_code });
+  if (r.success) {
+    box.innerHTML = `
+      <div class="alert alert-success">
+        Payment confirmed for <b>${r.student_name}</b> (${r.student_id_number}).
+      </div>
+      <div class="card" style="border:2px dashed var(--gold); text-align:center; margin-top:0;">
+        <p class="muted" style="margin:0 0 6px;">Give this validation code to the student:</p>
+        <div style="font-size:1.6rem; font-weight:800; letter-spacing:1px; color:var(--navy);">${r.validation_code}</div>
+      </div>`;
+    document.getElementById('billingCode').value = '';
+    loadPending();
+  } else {
+    box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
+  }
+});
+
+async function loadPending() {
+  const r = await apiGet('/admin/pending_billings.php');
+  const body = document.getElementById('pendingBody');
+  if (!r.success || !r.pending_billings.length) { body.innerHTML = '<tr><td colspan="6" class="muted">No pending payments.</td></tr>'; return; }
+  body.innerHTML = r.pending_billings.map(b => `
+    <tr>
+      <td>${b.billing_code}</td>
+      <td>${b.full_name} (${b.student_id_number})</td>
+      <td>${peso(b.total_amount)}</td>
+      <td>${b.semester}, AY ${b.academic_year}</td>
+      <td><span class="tag ${b.code_status === 'ready' ? 'tag-active' : 'tag-draft'}">${b.code_status}</span></td>
+      <td>${b.code ? `<b>${b.code}</b>` : '<span class="muted">Not yet released</span>'}</td>
+    </tr>`).join('');
+}
+
+init();
+</script>
+</body>
+</html>

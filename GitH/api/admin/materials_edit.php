@@ -21,6 +21,18 @@ if (isset($in['department_id'])) { $fields[] = "department_id = ?"; $params[] = 
 if (isset($in['program_id'])) { $fields[] = "program_id = ?"; $params[] = (int)$in['program_id'] ?: null; }
 if (isset($in['non_body_pages'])) { $fields[] = "non_body_pages = ?"; $params[] = json_encode($in['non_body_pages']); }
 if (isset($in['preview_excluded_pages'])) { $fields[] = "preview_excluded_pages = ?"; $params[] = json_encode($in['preview_excluded_pages']); }
+if (isset($in['author_name']) && trim($in['author_name']) !== '') {
+    $authorName = trim($in['author_name']);
+    $stmt2 = $db->prepare("SELECT id FROM authors WHERE name = ?");
+    $stmt2->execute([$authorName]);
+    $authorId = $stmt2->fetchColumn();
+    if (!$authorId) {
+        $stmt2 = $db->prepare("INSERT INTO authors (name) VALUES (?) RETURNING id");
+        $stmt2->execute([$authorName]);
+        $authorId = (int)$stmt2->fetchColumn();
+    }
+    $fields[] = "author_id = ?"; $params[] = $authorId;
+}
 if (isset($in['status']) && in_array($in['status'], ['draft','published'], true)) { $fields[] = "status = ?"; $params[] = $in['status']; }
 
 if (!$fields) respond(false, 'Nothing to update.', 422);

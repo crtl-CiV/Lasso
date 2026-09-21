@@ -14,7 +14,8 @@
     <a href="/admin/materials.html">Materials</a>
     <a href="/admin/users.html">Users</a>
     <a href="/admin/sales.html">Sales &amp; Cashier</a>
-    <button onclick="logout('/admin-login.html')">Logout</button>
+    <div id="notifBell" style="position:relative; margin-right:6px;"></div>
+    <button onclick="logout('/index.html')">Logout</button>
   </nav>
 </div>
 
@@ -29,6 +30,14 @@
       <tbody id="topMaterialsBody"></tbody>
     </table>
   </div>
+
+  <div class="card">
+    <h2>Top Author (by Active Subscriptions)</h2>
+    <table>
+      <thead><tr><th>Author</th><th>Active Subscriptions</th></tr></thead>
+      <tbody id="topAuthorsBody"></tbody>
+    </table>
+  </div>
 </div>
 
 <script src="/assets/js/api.js"></script>
@@ -39,6 +48,7 @@ function statCard(label, value) {
 
 async function init() {
   await requireAuth('admin');
+  initNotificationBell('notifBell');
   const r = await apiGet('/admin/dashboard.php');
   if (!r.success) { toast(r.message, 'error'); return; }
   const s = r.stats;
@@ -52,6 +62,10 @@ async function init() {
   document.getElementById('topMaterialsBody').innerHTML = r.top_materials.length
     ? r.top_materials.map(m => `<tr><td>${m.title}</td><td>${m.subscribers}</td></tr>`).join('')
     : '<tr><td colspan="2" class="muted">No subscriptions yet.</td></tr>';
+
+  document.getElementById('topAuthorsBody').innerHTML = r.top_authors.length
+    ? r.top_authors.map(a => `<tr><td>${a.name}</td><td>${a.active_subscriptions}</td></tr>`).join('')
+    : '<tr><td colspan="2" class="muted">No active subscriptions yet.</td></tr>';
 }
 init();
 </script>

@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/bootstrap.php';
-requireAdmin();
+requireStaff();
 $db = getDB();
 
 $studentId = (int)($_GET['student_id'] ?? 0);

@@ -14,30 +14,13 @@
     <a href="/admin/materials.html">Materials</a>
     <a href="/admin/users.html">Users</a>
     <a href="/admin/sales.html" class="active">Sales &amp; Cashier</a>
-    <button onclick="logout('/admin-login.html')">Logout</button>
+    <div id="notifBell" style="position:relative; margin-right:6px;"></div>
+    <button onclick="logout('/index.html')">Logout</button>
   </nav>
 </div>
 
 <div class="page container">
-  <h1>Cashier — Confirm Payment</h1>
-  <p class="muted">Enter the billing code presented by the student at the cashier to release their validation code.</p>
-  <div class="card">
-    <div id="cashierAlert"></div>
-    <form id="cashierForm" style="display:flex; gap:8px;">
-      <input type="text" id="billingCode" placeholder="Billing code, e.g. BS-XXXXXXXX" style="flex:1;" required>
-      <button class="btn btn-gold" type="submit">Confirm Payment</button>
-    </form>
-  </div>
-
-  <div class="card">
-    <h2>Pending Payments</h2>
-    <table>
-      <thead><tr><th>Billing Code</th><th>Student</th><th>Amount</th><th>Term</th><th>Code Status</th><th>Validation Code</th></tr></thead>
-      <tbody id="pendingBody"></tbody>
-    </table>
-  </div>
-
-  <h1 style="margin-top:30px;">Sales Report</h1>
+  <h1>Sales Report</h1>
   <p class="muted">Filter by any combination of category and period, then Generate. Every filter is optional — leave any of them on "All" to include everything.</p>
 
   <div class="card">
@@ -110,6 +93,15 @@
     </table>
   </div>
 
+  <h1 style="margin-top:30px;">Author Revenue (Currently Active Subscriptions)</h1>
+  <p class="muted">Rises and falls with currently active subscriptions — not an all-time total. Drops automatically as subscriptions expire.</p>
+  <div class="card">
+    <table>
+      <thead><tr><th>Author</th><th>Active Subscriptions</th><th>Active Revenue</th></tr></thead>
+      <tbody id="authorRankingBody"></tbody>
+    </table>
+  </div>
+
   <h1 style="margin-top:30px;">Subscription Status Monitoring</h1>
   <div class="card">
     <table>
@@ -126,8 +118,8 @@ let lastReport = null;
 
 async function init() {
   await requireAuth('admin');
+  initNotificationBell('notifBell');
   await loadFilterOptions();
-  await loadPending();
   await loadReport();
   await loadSubStatus();
 }
@@ -179,42 +171,6 @@ function currentFilterParams() {
   });
 }
 
-document.getElementById('cashierForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const box = document.getElementById('cashierAlert');
-  const billing_code = document.getElementById('billingCode').value.trim();
-  const r = await apiPost('/admin/confirm_payment.php', { billing_code });
-  if (r.success) {
-    box.innerHTML = `
-      <div class="alert alert-success">
-        Payment confirmed for <b>${r.student_name}</b> (${r.student_id_number}).
-      </div>
-      <div class="card" style="border:2px dashed var(--gold); text-align:center; margin-top:0;">
-        <p class="muted" style="margin:0 0 6px;">Give this validation code to the student:</p>
-        <div style="font-size:1.6rem; font-weight:800; letter-spacing:1px; color:var(--navy);">${r.validation_code}</div>
-      </div>`;
-    document.getElementById('billingCode').value = '';
-    loadPending();
-  } else {
-    box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
-  }
-});
-
-async function loadPending() {
-  const r = await apiGet('/admin/pending_billings.php');
-  const body = document.getElementById('pendingBody');
-  if (!r.success || !r.pending_billings.length) { body.innerHTML = '<tr><td colspan="6" class="muted">No pending payments.</td></tr>'; return; }
-  body.innerHTML = r.pending_billings.map(b => `
-    <tr>
-      <td>${b.billing_code}</td>
-      <td>${b.full_name} (${b.student_id_number})</td>
-      <td>${peso(b.total_amount)}</td>
-      <td>${b.semester}, AY ${b.academic_year}</td>
-      <td><span class="tag ${b.code_status === 'ready' ? 'tag-active' : 'tag-draft'}">${b.code_status}</span></td>
-      <td>${b.code ? `<b>${b.code}</b>` : '<span class="muted">Not yet released</span>'}</td>
-    </tr>`).join('');
-}
-
 async function loadReport() {
   const params = currentFilterParams();
   const r = await apiGet(`/admin/sales_report.php?${params.toString()}`);
@@ -231,6 +187,11 @@ async function loadReport() {
   body.innerHTML = r.report.length
     ? r.report.map(row => `<tr><td>${row.label ?? '—'}</td><td>${row.total_subscriptions}</td><td>${peso(row.total_revenue)}</td></tr>`).join('')
     : '<tr><td colspan="3" class="muted">No matching subscriptions for these filters.</td></tr>';
+
+  const authorBody = document.getElementById('authorRankingBody');
+  authorBody.innerHTML = r.author_ranking.length
+    ? r.author_ranking.map(a => `<tr><td>${a.author_name}</td><td>${a.active_subscriptions}</td><td>${peso(a.active_revenue)}</td></tr>`).join('')
+    : '<tr><td colspan="3" class="muted">No active subscriptions yet.</td></tr>';
 }
 
 function printReport() {

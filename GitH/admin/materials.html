@@ -15,7 +15,8 @@
     <a href="/admin/materials.html" class="active">Materials</a>
     <a href="/admin/users.html">Users</a>
     <a href="/admin/sales.html">Sales &amp; Cashier</a>
-    <button onclick="logout('/admin-login.html')">Logout</button>
+    <div id="notifBell" style="position:relative; margin-right:6px;"></div>
+    <button onclick="logout('/index.html')">Logout</button>
   </nav>
 </div>
 
@@ -50,6 +51,7 @@ let currentStatus = 'all';
 
 async function init() {
   await requireAuth('admin');
+  initNotificationBell('notifBell');
   const r = await apiGet('/reference_data.php');
   if (r.success) refs = r;
   await loadMaterials();
@@ -63,7 +65,7 @@ function switchTab(status, btn) {
 }
 
 function materialAdminCard(m) {
-  const cover = m.cover_image ? `<img src="/api/${m.cover_image}" alt="">` : m.title;
+  const cover = m.cover_image ? `<img src="${SUPABASE_PUBLIC_URL}${m.cover_image}" alt="">` : m.title;
   const tagClass = { draft: 'tag-draft', published: 'tag-published', trashed: 'tag-trashed' }[m.status];
   let actions = '';
   if (m.status === 'draft') actions += `<button class="btn btn-primary btn-sm" onclick="doAction(${m.id},'publish')">Publish</button>`;
@@ -82,7 +84,7 @@ function materialAdminCard(m) {
       <div class="cover">${m.is_promoted ? '<span class="promoted-tag">Featured</span>' : ''}${cover}</div>
       <div class="body">
         <div class="title">${m.title}</div>
-        <div class="meta">${m.material_code} • ${m.total_pages || 0} page(s) • ${m.subscriber_count} subscribers</div>
+        <div class="meta">by ${m.author_name || '—'} • ${m.material_code} • ${m.total_pages || 0} page(s) • ${m.subscriber_count} subscribers</div>
         <span class="tag ${tagClass}">${m.status}</span>
         <div class="price">${peso(m.price)}</div>
       </div>
@@ -133,6 +135,7 @@ function openUploadModal() {
     </div>
     <form id="uploadForm">
       <label>Title</label><input type="text" id="u_title" required>
+      <label>Author</label><input type="text" id="u_author" required placeholder="e.g. Juan Dela Cruz">
       <label>Description</label><textarea id="u_description" rows="3"></textarea>
       <div class="form-row">
         <div><label>Department</label><select id="u_department"><option value="">—</option>${depOpts}</select></div>
@@ -201,6 +204,7 @@ function commonFields() {
   const toArr = (s) => s.split(',').map(x => x.trim()).filter(Boolean).map(Number);
   return {
     title: document.getElementById('u_title').value.trim(),
+    author_name: document.getElementById('u_author').value.trim(),
     description: document.getElementById('u_description').value.trim(),
     department_id: document.getElementById('u_department').value,
     program_id: document.getElementById('u_program').value,
@@ -241,6 +245,7 @@ async function handleUploadSubmit(e) {
   const mode = document.getElementById('uploadForm').dataset.mode || 'pdf';
   const fields = commonFields();
   if (!fields.title || fields.price === '') { box.innerHTML = `<div class="alert alert-error">Title and price are required.</div>`; return; }
+  if (!fields.author_name) { box.innerHTML = `<div class="alert alert-error">Author is required.</div>`; return; }
 
   const submitBtn = document.getElementById('uploadSubmitBtn');
   submitBtn.disabled = true;
@@ -425,6 +430,7 @@ function openEditModal(m) {
     <h2>Edit Material</h2>
     <form id="editForm">
       <label>Title</label><input type="text" id="e_title" value="${m.title.replace(/"/g,'&quot;')}" required>
+      <label>Author</label><input type="text" id="e_author" value="${(m.author_name || '').replace(/"/g,'&quot;')}" required>
       <label>Description</label><textarea id="e_description" rows="3">${m.description || ''}</textarea>
       <div class="form-row">
         <div><label>Department</label><select id="e_department"><option value="">—</option>${depOpts}</select></div>
@@ -447,6 +453,7 @@ function openEditModal(m) {
     const r = await apiPost('/admin/materials_edit.php', {
       id: m.id,
       title: document.getElementById('e_title').value.trim(),
+      author_name: document.getElementById('e_author').value.trim(),
       description: document.getElementById('e_description').value.trim(),
       department_id: document.getElementById('e_department').value,
       program_id: document.getElementById('e_program').value,

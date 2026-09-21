@@ -1,11 +1,11 @@
 <?php
 require_once __DIR__ . '/../config/bootstrap.php';
-requireAdmin();
+requireStaff(); // admins manage; cashiers get read-only access via the frontend
 $db = getDB();
 $type = $_GET['type'] ?? 'students'; // 'students' | 'admins'
 
 if ($type === 'admins') {
-    $rows = $db->query("SELECT id, admin_id, full_name, position, status, created_at FROM administrators ORDER BY created_at DESC")->fetchAll();
+    $rows = $db->query("SELECT id, admin_id, email, role, full_name, position, status, created_at FROM administrators ORDER BY created_at DESC")->fetchAll();
     respond(true, ['admins' => $rows]);
 }
 
