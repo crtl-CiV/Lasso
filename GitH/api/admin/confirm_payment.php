@@ -24,12 +24,16 @@ if (!$billing) respond(false, 'Billing statement not found.', 404);
 if ($billing['status'] === 'paid') respond(false, 'This billing statement was already settled.', 409);
 
 $db->prepare("UPDATE validation_codes SET status='ready' WHERE billing_id=?")->execute([$billing['id']]);
+$db->prepare("UPDATE billing_statements SET status='paid', confirmed_by=?, confirmed_at=NOW() WHERE id=?")
+   ->execute([$staff['id'], $billing['id']]);
 
 $stmt = $db->prepare("SELECT code FROM validation_codes WHERE billing_id = ?");
 $stmt->execute([$billing['id']]);
 $code = $stmt->fetchColumn();
 
-// Notify the admin that a cashier (or admin) just processed this payment.
+// Log every confirmation for the audit trail either way. When the admin
+// confirms it themselves, mark it already-read so it doesn't show up as
+// a fresh alert on their own bell — they obviously already know.
 $stmt = $db->prepare("SELECT m.title FROM billing_statement_items bi
                        JOIN instructional_materials m ON m.id = bi.material_id
                        WHERE bi.billing_id = ?");
@@ -40,10 +44,11 @@ $titleList = $titles ? implode(', ', $titles) : 'their billing statement';
 $message = "{$billing['full_name']} ({$billing['student_id_number']}) paid for {$titleList}. "
          . "Validation code {$code} was released by " . ($staff['role'] === 'cashier' ? 'cashier' : 'admin')
          . " {$staff['full_name']}.";
+$alreadyRead = ($staff['role'] === 'admin');
 
-$db->prepare("INSERT INTO notifications (type, message, student_id, billing_id, cashier_id)
-              VALUES ('payment_confirmed', ?, ?, ?, ?)")
-   ->execute([$message, $billing['student_id'], $billing['id'], $staff['id']]);
+$db->prepare("INSERT INTO notifications (type, message, student_id, billing_id, cashier_id, is_read)
+              VALUES ('payment_confirmed', ?, ?, ?, ?, ?)")
+   ->execute([$message, $billing['student_id'], $billing['id'], $staff['id'], $alreadyRead]);
 
 respond(true, [
     'message' => 'Payment confirmed.',
