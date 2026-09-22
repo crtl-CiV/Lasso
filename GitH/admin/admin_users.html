@@ -13,7 +13,7 @@
     <a href="/admin/dashboard.html">Dashboard</a>
     <a href="/admin/materials.html">Materials</a>
     <a href="/admin/users.html" class="active">Users</a>
-    <a href="/admin/sales.html">Sales &amp; Cashier</a>
+    <a href="/admin/sales.html">Sales</a>
     <div id="notifBell" style="position:relative; margin-right:6px;"></div>
     <button onclick="logout('/index.html')">Logout</button>
   </nav>
@@ -28,6 +28,7 @@
   <div class="tabs">
     <button class="active" onclick="switchTab('students', this)">Students</button>
     <button onclick="switchTab('admins', this)">Administrators</button>
+    <button onclick="switchTab('cashiers', this)">Cashiers</button>
   </div>
 
   <div class="card">
@@ -57,7 +58,10 @@ function switchTab(type, btn) {
 }
 
 async function loadUsers() {
-  const r = await apiGet(`/admin/users_list.php?type=${currentType}`);
+  // 'cashiers' isn't its own backend type — administrators already carries a
+  // role column, so we fetch the same admins list and filter client-side.
+  const fetchType = currentType === 'cashiers' ? 'admins' : currentType;
+  const r = await apiGet(`/admin/users_list.php?type=${fetchType}`);
   const table = document.getElementById('usersTable');
   if (!r.success) { table.innerHTML = `<tr><td>${r.message}</td></tr>`; return; }
 
@@ -79,8 +83,10 @@ async function loadUsers() {
           </td>
         </tr>`).join('') || '<tr><td colspan="7" class="muted">No students yet.</td></tr>'}</tbody>`;
   } else {
+    const rows = currentType === 'cashiers' ? r.admins.filter(a => a.role === 'cashier') : r.admins;
+    const emptyMsg = currentType === 'cashiers' ? 'No cashiers registered yet.' : 'No administrators yet.';
     table.innerHTML = `<thead><tr><th>Admin ID</th><th>Name</th><th>Email</th><th>Role</th><th>Position</th><th>Status</th><th></th></tr></thead>
-      <tbody>${r.admins.map(a => `
+      <tbody>${rows.map(a => `
         <tr>
           <td>${a.admin_id}</td>
           <td>${a.full_name}</td>
@@ -94,7 +100,7 @@ async function loadUsers() {
               : `<button class="btn btn-outline btn-sm" onclick="userAction(${a.id},'admin','restore')">Restore</button>
                  <button class="btn btn-danger btn-sm" onclick="confirmUserDelete(${a.id},'admin')">Delete Permanently</button>`}
           </td>
-        </tr>`).join('') || '<tr><td colspan="7" class="muted">No administrators yet.</td></tr>'}</tbody>`;
+        </tr>`).join('') || `<tr><td colspan="7" class="muted">${emptyMsg}</td></tr>`}</tbody>`;
   }
 }
 
