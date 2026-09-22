@@ -7,7 +7,7 @@ const API_BASE = '/api';
 // profile photos). Fill in your project's URL from Supabase -> Settings -> API.
 // Cover/photo paths returned by the API (e.g. 'covers/cover_1_123.jpg') get
 // appended to this to form the full image URL.
-const SUPABASE_PUBLIC_URL = 'https://rghdjktjaxatbxybtwsu.supabase.co/storage/v1/object/public/lasso-public/';
+const SUPABASE_PUBLIC_URL = 'https://YOUR-PROJECT-REF.supabase.co/storage/v1/object/public/lasso-public/';
 
 async function apiGet(path) {
   const res = await fetch(API_BASE + path, { credentials: 'same-origin' });
@@ -126,6 +126,29 @@ async function logout(redirectTo) {
   await apiPost('/auth/logout.php', {});
   window.location.href = redirectTo || '/index.html';
 }
+
+/** Auto-injects a hamburger button next to the logo on every page that has
+ *  a .topbar, so individual pages don't need markup changes. On mobile the
+ *  button toggles the existing nav open/closed as a dropdown (see CSS). */
+function initMobileNav() {
+  const brand = document.querySelector('.topbar .brand');
+  const nav = document.querySelector('.topbar nav');
+  if (!brand || !nav) return;
+
+  const btn = document.createElement('button');
+  btn.className = 'hamburger';
+  btn.setAttribute('aria-label', 'Menu');
+  btn.textContent = '☰';
+  btn.onclick = () => nav.classList.toggle('nav-open');
+  brand.insertAdjacentElement('afterend', btn);
+
+  // Close the menu after tapping a link, and on outside taps
+  nav.addEventListener('click', (e) => { if (e.target.tagName === 'A') nav.classList.remove('nav-open'); });
+  document.addEventListener('click', (e) => {
+    if (!nav.contains(e.target) && !btn.contains(e.target)) nav.classList.remove('nav-open');
+  });
+}
+document.addEventListener('DOMContentLoaded', initMobileNav);
 
 // Basic piracy-deterrence measures on any page that includes this file
 document.addEventListener('contextmenu', (e) => {
