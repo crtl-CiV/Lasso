@@ -14,6 +14,7 @@ RUN docker-php-ext-install pdo pdo_pgsql pgsql
 RUN a2enmod rewrite
 
 COPY . /var/www/html/
+COPY uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 
 RUN chown -R www-data:www-data /var/www/html
 

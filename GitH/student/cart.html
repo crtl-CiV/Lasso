@@ -63,10 +63,11 @@ async function loadPending() {
   box.innerHTML = r.pending_billings.map(b => `
     <div class="card" style="border-left:4px solid var(--gold);">
       <b>Billing #${b.billing_code}</b> — ${peso(b.total_amount)}
-      ${b.code_status === 'ready'
-        ? `<p style="margin:6px 0 0;">Payment confirmed. Your validation code: <b style="color:var(--navy); font-size:1.05rem;">${b.code}</b></p>
-           <p class="muted">Enter it in <a href="/student/profile.html" style="color:var(--navy); font-weight:700;">Profile</a> to activate your subscription.</p>`
-        : `<p class="muted">Status: awaiting payment at the cashier. The cashier will give you your validation code once payment is confirmed.</p>`}
+      ${b.receipt_status === 'submitted'
+        ? `<p class="muted" style="margin:6px 0 0;">Receipt (OR ${b.receipt_number}) submitted — waiting for administrator review.</p>`
+        : b.receipt_status === 'rejected'
+          ? `<p style="margin:6px 0 0; color:#b91c1c;">Your receipt was rejected${b.receipt_note ? ': ' + b.receipt_note : '.'} <a href="/student/profile.html" style="color:var(--navy); font-weight:700;">Submit it again in Profile</a>.</p>`
+          : `<p class="muted" style="margin:6px 0 0;">Pay at the school cashier, then submit your official receipt (OR) in <a href="/student/profile.html" style="color:var(--navy); font-weight:700;">Profile</a> to unlock your materials.</p>`}
     </div>`).join('');
 }
 
@@ -109,7 +110,7 @@ async function checkout() {
 }
 
 /** Renders the printable billing statement modal. Used both right after
- * checkout (isFresh=true, shows the cashier instructions banner) and when
+ * checkout (isFresh=true, shows the payment instructions banner) and when
  * reprinting from Billing History (isFresh=false, plain reprint). */
 function showBillingModal(b, isFresh) {
   const rows = b.items.map(i => `<tr><td>${i.title}</td><td style="text-align:right;">${peso(i.price)}</td></tr>`).join('');
@@ -123,7 +124,7 @@ function showBillingModal(b, isFresh) {
     </table>
     <p class="muted">${b.semester}, AY ${b.academic_year}</p>
     ${isFresh
-      ? `<div class="alert alert-info" style="margin-top:12px;">Print this statement and present it at the cashier. Your validation code has been transmitted to the cashier's office and will be released once payment is confirmed — then submit it from your Profile page.</div>`
+      ? `<div class="alert alert-info" style="margin-top:12px;">Print this statement and pay at the school cashier. Then submit the official receipt (OR) from your Profile page — an administrator will validate it and unlock your materials.</div>`
       : `<div class="alert alert-info" style="margin-top:12px;">Reprinted copy of a previously generated billing statement.</div>`}
     <div style="display:flex; gap:10px; margin-top:14px;">
       <button class="btn btn-outline" style="flex:1;" onclick="window.print()">Print</button>
@@ -149,7 +150,9 @@ async function loadHistory() {
   body.innerHTML = historyCache.map((b, idx) => {
     const statusTag = b.status === 'paid'
       ? '<span class="tag tag-active">Paid</span>'
-      : `<span class="tag tag-draft">${b.code_status === 'ready' ? 'Awaiting your code submission' : 'Pending payment'}</span>`;
+      : b.receipt_status === 'submitted' ? '<span class="tag tag-draft">Receipt under review</span>'
+      : b.receipt_status === 'rejected' ? '<span class="tag tag-trashed">Receipt rejected</span>'
+      : '<span class="tag tag-draft">Awaiting payment / receipt</span>';
     return `
       <tr>
         <td>${b.billing_code}</td>

@@ -7,7 +7,7 @@ const API_BASE = '/api';
 // profile photos). Fill in your project's URL from Supabase -> Settings -> API.
 // Cover/photo paths returned by the API (e.g. 'covers/cover_1_123.jpg') get
 // appended to this to form the full image URL.
-const SUPABASE_PUBLIC_URL = 'https://YOUR-PROJECT-REF.supabase.co/storage/v1/object/public/lasso-public/';
+const SUPABASE_PUBLIC_URL = 'https://rghdjktjaxatbxybtwsu.supabase.co/storage/v1/object/public/lasso-public/';
 
 async function apiGet(path) {
   const res = await fetch(API_BASE + path, { credentials: 'same-origin' });
@@ -55,7 +55,7 @@ function toast(msg, type = 'info') {
 }
 
 /** Guards a page: redirects to login if not authenticated as an allowed role.
- *  `role` can be a single role string ('admin') or an array (['admin','cashier']). */
+ *  `role` can be a single role string ('admin') or an array (['admin','student']). */
 async function requireAuth(role) {
   const r = await apiGet('/auth/me.php');
   const allowed = Array.isArray(role) ? role : (role ? [role] : null);
@@ -66,61 +66,36 @@ async function requireAuth(role) {
   return r.user;
 }
 
-/** Renders a bell icon with unread count into the given container element ID,
- *  and polls for new notifications every 30 seconds. Admin pages only. */
-function initNotificationBell(containerId) {
-  const el = document.getElementById(containerId);
-  if (!el) return;
-  el.innerHTML = `<span id="__bellIcon" style="position:relative; cursor:pointer; font-size:1.3rem;" onclick="toggleNotifPanel()">
-    🔔<span id="__bellCount" style="display:none; position:absolute; top:-6px; right:-8px; background:#dc2626; color:#fff; font-size:.65rem; font-weight:800; border-radius:10px; padding:1px 5px;"></span>
-  </span>
-  <div id="__notifPanel" style="display:none; position:absolute; right:20px; top:56px; width:320px; max-height:400px; overflow-y:auto; background:#fff; border:1px solid #ddd; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.15); z-index:50;">
-    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid #eee;">
-      <b style="font-size:.9rem;">Notifications</b>
-      <a href="#" style="font-size:.78rem;" onclick="event.preventDefault(); markAllNotifsRead();">Mark all read</a>
-    </div>
-    <div id="__notifList"></div>
-  </div>`;
-  pollNotifications();
-  setInterval(pollNotifications, 30000);
+// ---------- Year levels (single years first, then the allowed ranges) ----------
+const YEAR_LEVEL_OPTIONS = [
+  ['1', '1st Year'], ['2', '2nd Year'], ['3', '3rd Year'], ['4', '4th Year'], ['5', '5th Year'],
+  ['1-2', '1st - 2nd Year'], ['1-3', '1st - 3rd Year'], ['1-4', '1st - 4th Year'], ['1-5', '1st - 5th Year'],
+  ['2-3', '2nd - 3rd Year'], ['2-4', '2nd - 4th Year'], ['2-5', '2nd - 5th Year'],
+  ['3-4', '3rd - 4th Year'], ['3-5', '3rd - 5th Year'], ['4-5', '4th - 5th Year'],
+];
+/** <option> list for a year-level <select>. `selected` is a code like '2' or '1-3'. */
+function yearLevelOptionsHtml(selected, blankLabel) {
+  const blank = blankLabel !== undefined ? `<option value="">${blankLabel}</option>` : '';
+  return blank + YEAR_LEVEL_OPTIONS.map(([v, l]) => `<option value="${v}" ${v === String(selected) ? 'selected' : ''}>${l}</option>`).join('');
+}
+/** Code ('2' or '1-3') for a material row that carries year_min / year_max. */
+function materialYearCode(m) {
+  return m.year_min === m.year_max ? String(m.year_min) : `${m.year_min}-${m.year_max}`;
 }
 
-async function pollNotifications() {
-  const r = await apiGet('/admin/notifications_list.php');
-  if (!r.success) return;
-  const countEl = document.getElementById('__bellCount');
-  const listEl = document.getElementById('__notifList');
-  if (!countEl || !listEl) return;
-
-  if (r.unread_count > 0) { countEl.textContent = r.unread_count; countEl.style.display = 'inline-block'; }
-  else { countEl.style.display = 'none'; }
-
-  listEl.innerHTML = r.notifications.length
-    ? r.notifications.map(n => `
-        <div style="padding:10px 14px; border-bottom:1px solid #f2f2f2; ${n.is_read ? 'opacity:.55;' : 'background:#fffbea;'}">
-          <div style="font-size:.82rem; line-height:1.4;">${n.message}</div>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
-            <span class="muted" style="font-size:.7rem;">${new Date(n.created_at).toLocaleString()}</span>
-            ${!n.is_read ? `<a href="#" style="font-size:.72rem;" onclick="event.preventDefault(); markNotifRead(${n.id});">Mark read</a>` : ''}
-          </div>
-        </div>`).join('')
-    : '<div class="muted" style="padding:14px; font-size:.85rem;">No notifications yet.</div>';
+// ---------- Subscription duration helpers (expiry is a YYYY-MM-DD date) ----------
+function daysLeft(expiryDate) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((new Date(expiryDate + 'T00:00:00') - today) / 86400000);
 }
-
-function toggleNotifPanel() {
-  const p = document.getElementById('__notifPanel');
-  if (p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
+function durationText(expiryDate) {
+  const d = daysLeft(expiryDate);
+  if (d > 1) return `${d} days left`;
+  if (d === 1) return '1 day left';
+  if (d === 0) return 'Expires today';
+  return `Expired ${Math.abs(d)} day${Math.abs(d) === 1 ? '' : 's'} ago`;
 }
-
-async function markNotifRead(id) {
-  await apiPost('/admin/notifications_mark_read.php', { id });
-  pollNotifications();
-}
-
-async function markAllNotifsRead() {
-  await apiPost('/admin/notifications_mark_read.php', { all: true });
-  pollNotifications();
-}
+function subIsActive(s) { return s.status === 'active' && daysLeft(s.expiry_date) >= 0; }
 
 async function logout(redirectTo) {
   await apiPost('/auth/logout.php', {});

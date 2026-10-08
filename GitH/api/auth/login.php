@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// LASSO — Unified login for students, admins, and cashiers.
+// LASSO — Unified login for students and admins.
 // Everyone logs in with email + password; role is looked up
 // server-side, not chosen by the client.
 // =========================================================
@@ -35,7 +35,7 @@ if ($user) {
     respond(true, ['user' => $_SESSION['user']]);
 }
 
-// Not a student — check administrators/cashiers (by email)
+// Not a student — check administrators (by email)
 $stmt = $db->prepare('SELECT * FROM administrators WHERE email = ? LIMIT 1');
 $stmt->execute([$email]);
 $user = $stmt->fetch();
@@ -44,7 +44,7 @@ if ($user) {
         respond(false, 'Invalid credentials.', 401);
     }
     $_SESSION['user'] = [
-        'id' => $user['id'], 'role' => $user['role'], // 'admin' | 'cashier'
+        'id' => $user['id'], 'role' => $user['role'], // 'admin'
         'admin_id' => $user['admin_id'], 'email' => $user['email'],
         'full_name' => $user['full_name'], 'position' => $user['position'],
     ];

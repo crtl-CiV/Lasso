@@ -44,17 +44,23 @@ async function refreshCartBadge() {
 }
 
 function libCard(m) {
-  const tagClass = m.status === 'active' ? 'tag-active' : 'tag-expired';
+  const live = subIsActive(m) ? 'active' : 'expired';
+  m = Object.assign({}, m, { status: live });
+  const tagClass = live === 'active' ? 'tag-active' : 'tag-expired';
   const cover = m.cover_image ? `<img src="${SUPABASE_PUBLIC_URL}${m.cover_image}" alt="">` : m.title;
   return `
     <div class="mcard">
       <div class="cover" onclick="openReader(${m.material_id})" style="cursor:pointer;">${cover}</div>
       <div class="body">
-        <div class="title">${m.title}</div>
+        <div class="title">${m.title}
+          <button type="button" title="Subscription details" aria-label="Subscription details"
+                  onclick='showSubInfo(${JSON.stringify({t: m.title, s: m.start_date, e: m.expiry_date, n: m.semester_count, st: m.status}).replace(/'/g, "&#39;")})'
+                  style="border:none; background:#e8eefc; color:var(--navy); width:22px; height:22px; border-radius:50%; font-weight:800; font-size:.8rem; cursor:pointer; margin-left:6px; vertical-align:middle;">i</button>
+        </div>
         <div class="meta">${m.material_code} • Renewed ${m.semester_count}x</div>
         <span class="tag ${tagClass}">${m.status}</span>
         <div class="progress-bar" style="margin-top:6px;"><div style="width:${m.percent_complete}%;"></div></div>
-        <div class="meta">${m.percent_complete}% complete • expires ${m.expiry_date}</div>
+        <div class="meta">${m.percent_complete}% complete • ${durationText(m.expiry_date)}</div>
       </div>
       <div class="actions">
         <button class="btn btn-primary btn-sm" style="flex:1;" onclick="openReader(${m.material_id})" ${m.status !== 'active' ? 'disabled' : ''}>
@@ -71,7 +77,7 @@ async function loadLibrary() {
   if (!r.library.length) {
     grid.innerHTML = `<div class="empty-state">
       <p>Your Library is empty.</p>
-      <p class="muted">Subscribe to materials from the Store and validate your code to see them here.</p>
+      <p class="muted">Subscribe to materials from the Store and they will appear here once your receipt is approved.</p>
       <a class="btn btn-primary" href="/student/store.html" style="margin-top:10px; display:inline-flex;">Go to Store</a>
     </div>`;
     return;
@@ -99,6 +105,22 @@ function renderReader(m, page) {
     </div>
     <button class="btn btn-primary btn-block" style="margin-top:14px;" onclick="closeModal(); loadLibrary();">Close</button>
   `;
+  document.getElementById('modalBackdrop').style.display = 'flex';
+}
+
+function showSubInfo(i) {
+  const active = i.st === 'active' && daysLeft(i.e) >= 0;
+  document.getElementById('modalContent').innerHTML = `
+    <h2>Subscription details</h2>
+    <p style="font-weight:700; margin-top:0;">${i.t}</p>
+    <table style="min-width:0;">
+      <tr><td class="muted">Status</td><td><span class="tag ${active ? 'tag-active' : 'tag-expired'}">${active ? 'active' : 'expired'}</span></td></tr>
+      <tr><td class="muted">Subscribed on</td><td>${i.s}</td></tr>
+      <tr><td class="muted">Access until</td><td><b>${i.e}</b></td></tr>
+      <tr><td class="muted">Time remaining</td><td><b>${durationText(i.e)}</b></td></tr>
+      <tr><td class="muted">Semesters purchased</td><td>${i.n} (3 months each)</td></tr>
+    </table>
+    <button class="btn btn-primary btn-block" style="margin-top:14px;" onclick="closeModal()">Close</button>`;
   document.getElementById('modalBackdrop').style.display = 'flex';
 }
 

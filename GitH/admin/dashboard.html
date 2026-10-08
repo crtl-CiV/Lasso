@@ -14,7 +14,6 @@
     <a href="/admin/materials.html">Materials</a>
     <a href="/admin/users.html">Users</a>
     <a href="/admin/sales.html">Sales</a>
-    <div id="notifBell" style="position:relative; margin-right:6px;"></div>
     <button onclick="logout('/index.html')">Logout</button>
   </nav>
 </div>
@@ -48,7 +47,6 @@ function statCard(label, value) {
 
 async function init() {
   await requireAuth('admin');
-  initNotificationBell('notifBell');
   const r = await apiGet('/admin/dashboard.php');
   if (!r.success) { toast(r.message, 'error'); return; }
   const s = r.stats;

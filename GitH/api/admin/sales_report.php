@@ -18,12 +18,13 @@ $semester = trim($_GET['semester'] ?? '');
 $academicYear = trim($_GET['academic_year'] ?? '');
 $dateFrom = trim($_GET['date_from'] ?? '');
 $dateTo = trim($_GET['date_to'] ?? '');
+$yearRange = ($_GET['year_level'] ?? '') !== '' ? parseYearRange($_GET['year_level']) : null;
 
 $groupCols = [
     'material'   => ['m.title AS label', 'm.id'],
     'department' => ['d.name AS label', 'd.id'],
     'program'    => ['p.name AS label', 'p.id'],
-    'year_level' => ['s.year_level AS label', 's.year_level'],
+    'year_level' => ['m.year_level AS label', 'm.year_level'],
     'semester'   => ['b.semester AS label', 'b.semester'],
 ];
 if (!isset($groupCols[$groupBy])) $groupBy = 'material';
@@ -42,6 +43,7 @@ $params = [];
 if ($materialId > 0)   { $sql .= " AND m.id = ?"; $params[] = $materialId; }
 if ($departmentId > 0) { $sql .= " AND s.department_id = ?"; $params[] = $departmentId; }
 if ($programId > 0)    { $sql .= " AND s.program_id = ?"; $params[] = $programId; }
+if ($yearRange)         { $sql .= " AND m.year_min = ? AND m.year_max = ?"; $params[] = $yearRange[0]; $params[] = $yearRange[1]; }
 if ($semester !== '')  { $sql .= " AND b.semester = ?"; $params[] = $semester; }
 if ($academicYear !== '') { $sql .= " AND b.academic_year = ?"; $params[] = $academicYear; }
 if ($dateFrom !== '')  { $sql .= " AND DATE(sub.created_at) >= ?"; $params[] = $dateFrom; }
@@ -77,6 +79,7 @@ respond(true, [
         'material_id' => $materialId ?: null,
         'department_id' => $departmentId ?: null,
         'program_id' => $programId ?: null,
+        'year_level' => $yearRange ? yearRangeLabel($yearRange[0], $yearRange[1]) : null,
         'semester' => $semester ?: null,
         'academic_year' => $academicYear ?: null,
         'date_from' => $dateFrom ?: null,

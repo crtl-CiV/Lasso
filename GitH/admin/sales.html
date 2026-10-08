@@ -14,34 +14,33 @@
     <a href="/admin/materials.html">Materials</a>
     <a href="/admin/users.html">Users</a>
     <a href="/admin/sales.html" class="active">Sales</a>
-    <div id="notifBell" style="position:relative; margin-right:6px;"></div>
     <button onclick="logout('/index.html')">Logout</button>
   </nav>
 </div>
 
 <div class="page container">
-  <h1>Billing &amp; Validation Codes</h1>
-  <p class="muted">Enter the billing code presented by the student to release their validation code. Shared with the cashier view.</p>
+  <h1>Billing &amp; Receipts</h1>
+  <p class="muted">Students pay the school cashier and submit their official receipt (OR) here. Enter the billing code to check the receipt and grant access.</p>
   <div class="card">
-    <div id="cashierAlert"></div>
-    <form id="cashierForm" style="display:flex; gap:8px;">
+    <div id="billingAlert"></div>
+    <form id="billingForm" style="display:flex; gap:8px;">
       <input type="text" id="billingCode" placeholder="Billing code, e.g. BS-XXXXXXXX" style="flex:1;" required>
-      <button class="btn btn-gold" type="submit">Confirm Payment</button>
+      <button class="btn btn-gold" type="submit">Review Receipt</button>
     </form>
   </div>
 
   <div class="card">
-    <h2>Pending Payments</h2>
+    <h2>Awaiting Access</h2>
     <table>
-      <thead><tr><th>Billing Code</th><th>Student</th><th>Amount</th><th>Term</th><th>Code Status</th><th>Validation Code</th></tr></thead>
+      <thead><tr><th>Billing Code</th><th>Student</th><th>Amount</th><th>Term</th><th>Receipt</th><th>OR No.</th><th></th></tr></thead>
       <tbody id="pendingBody"></tbody>
     </table>
   </div>
 
   <div class="card">
-    <h2>Payment History</h2>
+    <h2>Approved Payments</h2>
     <table>
-      <thead><tr><th>Billing Code</th><th>Student</th><th>Amount</th><th>Confirmed By</th><th>Confirmed At</th></tr></thead>
+      <thead><tr><th>Billing Code</th><th>Student</th><th>Amount</th><th>OR No.</th><th>Approved By</th><th>Approved At</th><th></th></tr></thead>
       <tbody id="billingHistoryBody"></tbody>
     </table>
   </div>
@@ -72,6 +71,10 @@
       <div>
         <label>Program</label>
         <select id="f_program"><option value="0">All programs</option></select>
+      </div>
+      <div>
+        <label>Year Level (material)</label>
+        <select id="f_year_level"></select>
       </div>
       <div>
         <label>Semester</label>
@@ -137,6 +140,10 @@
   </div>
 </div>
 
+<div id="rcpBackdrop" class="modal-backdrop" style="display:none;">
+  <div class="modal" id="rcpModal" style="max-width:560px; max-height:90vh; overflow-y:auto;"></div>
+</div>
+
 <script src="/assets/js/api.js"></script>
 <script>
 let refs = { departments: [], programs: [] };
@@ -144,7 +151,7 @@ let lastReport = null;
 
 async function init() {
   await requireAuth('admin');
-  initNotificationBell('notifBell');
+  document.getElementById('f_year_level').innerHTML = yearLevelOptionsHtml('', 'All year levels');
   await loadFilterOptions();
   await loadPending();
   await loadBillingHistory();
@@ -152,54 +159,122 @@ async function init() {
   await loadSubStatus();
 }
 
-document.getElementById('cashierForm').addEventListener('submit', async (e) => {
+document.getElementById('billingForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const box = document.getElementById('cashierAlert');
-  const billing_code = document.getElementById('billingCode').value.trim();
-  const r = await apiPost('/admin/confirm_payment.php', { billing_code });
-  if (r.success) {
-    box.innerHTML = `
-      <div class="alert alert-success">
-        Payment confirmed for <b>${r.student_name}</b> (${r.student_id_number}).
-      </div>
-      <div class="card" style="border:2px dashed var(--gold); text-align:center; margin-top:0;">
-        <p class="muted" style="margin:0 0 6px;">Give this validation code to the student:</p>
-        <div style="font-size:1.6rem; font-weight:800; letter-spacing:1px; color:var(--navy);">${r.validation_code}</div>
-      </div>`;
-    document.getElementById('billingCode').value = '';
-    loadPending();
-    loadBillingHistory();
-  } else {
-    box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
-  }
+  const code = document.getElementById('billingCode').value.trim();
+  const ok = await reviewBilling(code);
+  if (ok) document.getElementById('billingCode').value = '';
 });
+
+async function reviewBilling(code) {
+  const box = document.getElementById('billingAlert');
+  box.innerHTML = '';
+  const r = await apiGet('/admin/billing_review.php?code=' + encodeURIComponent(code));
+  if (!r.success) { box.innerHTML = `<div class="alert alert-error">${r.message}</div>`; return false; }
+  const b = r.billing;
+  const items = b.items.map(i => `<tr><td>${i.title}<div class="muted">${i.material_code}</div></td><td style="text-align:right;">${peso(i.price)}</td></tr>`).join('');
+
+  let receiptBlock;
+  if (b.status === 'paid') {
+    receiptBlock = `<div class="alert alert-success">This billing was already approved (OR ${b.receipt_number || '—'}).</div>`;
+  } else if (b.receipt_status === 'submitted') {
+    receiptBlock = `
+      <p><b>OR number submitted:</b> ${b.receipt_number}</p>
+      <img src="/api/admin/receipt_photo.php?id=${b.id}" alt="Receipt" style="width:100%; max-height:380px; object-fit:contain; border:1px solid #e5e7eb; border-radius:8px; background:#f8fafc;">
+      <label style="margin-top:14px;">Type the billing code to grant access</label>
+      <input type="text" id="rcpConfirmCode" placeholder="${b.billing_code}" autocomplete="off">
+      <div id="rcpAlert"></div>
+      <div style="display:flex; gap:10px; margin-top:12px;">
+        <button class="btn btn-primary" style="flex:1;" onclick="approveBilling('${b.billing_code}')">Validate &amp; Grant Access</button>
+        <button class="btn btn-danger" style="flex:1;" onclick="showReject('${b.billing_code}')">Reject</button>
+      </div>`;
+  } else if (b.receipt_status === 'rejected') {
+    receiptBlock = `<div class="alert alert-error">Receipt was rejected: ${b.receipt_note || '—'}. Waiting for the student to submit a new one.</div>`;
+  } else {
+    receiptBlock = `<div class="alert alert-info">The student has not submitted a receipt for this billing yet.</div>`;
+  }
+
+  document.getElementById('rcpModal').innerHTML = `
+    <h2>Billing ${b.billing_code}</h2>
+    <p style="margin-top:0;"><b>${b.student_name}</b> (${b.student_id_number})<br><span class="muted">${b.semester}, AY ${b.academic_year}</span></p>
+    <table style="min-width:0;"><tbody>${items}</tbody>
+      <tfoot><tr><td><b>Total</b></td><td style="text-align:right;"><b>${peso(b.total_amount)}</b></td></tr></tfoot></table>
+    <div style="margin-top:14px;">${receiptBlock}</div>
+    <button class="btn btn-outline btn-block" style="margin-top:12px;" onclick="closeReceiptModal()">Close</button>`;
+  document.getElementById('rcpBackdrop').style.display = 'flex';
+  return true;
+}
+
+async function approveBilling(code) {
+  const typed = document.getElementById('rcpConfirmCode').value.trim();
+  const box = document.getElementById('rcpAlert');
+  if (typed.toLowerCase() !== code.toLowerCase()) { box.innerHTML = '<div class="alert alert-error">The billing code you typed does not match this billing.</div>'; return; }
+  const r = await apiPost('/admin/confirm_payment.php', { billing_code: code, action: 'approve' });
+  if (!r.success) { box.innerHTML = `<div class="alert alert-error">${r.message}</div>`; return; }
+  closeReceiptModal();
+  document.getElementById('billingAlert').innerHTML =
+    `<div class="alert alert-success">Access granted to <b>${r.student_name}</b> (${r.student_id_number}) for: ${r.materials.join(', ')}.</div>`;
+  loadPending(); loadBillingHistory(); loadSubStatus();
+}
+
+function showReject(code) {
+  document.getElementById('rcpAlert').innerHTML = `
+    <label>Reason for rejecting (shown to the student)</label>
+    <textarea id="rcpNote" rows="2" placeholder="e.g. OR number does not match the photo"></textarea>
+    <button class="btn btn-danger" style="margin-top:8px;" onclick="rejectBilling('${code}')">Confirm Rejection</button>`;
+}
+
+async function rejectBilling(code) {
+  const note = document.getElementById('rcpNote').value.trim();
+  const r = await apiPost('/admin/confirm_payment.php', { billing_code: code, action: 'reject', note });
+  if (!r.success) { toast(r.message, 'error'); return; }
+  closeReceiptModal();
+  toast(r.message, 'success');
+  loadPending();
+}
+
+function viewReceipt(id, orNumber) {
+  document.getElementById('rcpModal').innerHTML = `
+    <h2>Receipt${orNumber ? ' — OR ' + orNumber : ''}</h2>
+    <img src="/api/admin/receipt_photo.php?id=${id}" alt="Receipt" style="width:100%; border:1px solid #e5e7eb; border-radius:8px;">
+    <button class="btn btn-outline btn-block" style="margin-top:12px;" onclick="closeReceiptModal()">Close</button>`;
+  document.getElementById('rcpBackdrop').style.display = 'flex';
+}
+
+function closeReceiptModal() { document.getElementById('rcpBackdrop').style.display = 'none'; }
 
 async function loadPending() {
   const r = await apiGet('/admin/pending_billings.php');
   const body = document.getElementById('pendingBody');
-  if (!r.success || !r.pending_billings.length) { body.innerHTML = '<tr><td colspan="6" class="muted">No pending payments.</td></tr>'; return; }
-  body.innerHTML = r.pending_billings.map(b => `
+  if (!r.success || !r.pending_billings.length) { body.innerHTML = '<tr><td colspan="7" class="muted">No billings waiting for access.</td></tr>'; return; }
+  const tag = { none: ['tag-draft', 'No receipt yet'], submitted: ['tag-active', 'Needs review'], rejected: ['tag-trashed', 'Rejected'] };
+  body.innerHTML = r.pending_billings.map(b => {
+    const [cls, label] = tag[b.receipt_status] || tag.none;
+    return `
     <tr>
       <td>${b.billing_code}</td>
       <td>${b.full_name} (${b.student_id_number})</td>
       <td>${peso(b.total_amount)}</td>
       <td>${b.semester}, AY ${b.academic_year}</td>
-      <td><span class="tag ${b.code_status === 'ready' ? 'tag-active' : 'tag-draft'}">${b.code_status}</span></td>
-      <td>${b.code ? `<b>${b.code}</b>` : '<span class="muted">Not yet released</span>'}</td>
-    </tr>`).join('');
+      <td><span class="tag ${cls}">${label}</span></td>
+      <td>${b.receipt_number || '—'}</td>
+      <td>${b.receipt_status === 'submitted' ? `<button class="btn btn-primary btn-sm" onclick="reviewBilling('${b.billing_code}')">Review</button>` : ''}</td>
+    </tr>`; }).join('');
 }
 
 async function loadBillingHistory() {
   const r = await apiGet('/admin/billing_history.php');
   const body = document.getElementById('billingHistoryBody');
-  if (!r.success || !r.billing_history.length) { body.innerHTML = '<tr><td colspan="5" class="muted">No confirmed payments yet.</td></tr>'; return; }
+  if (!r.success || !r.billing_history.length) { body.innerHTML = '<tr><td colspan="7" class="muted">No approved payments yet.</td></tr>'; return; }
   body.innerHTML = r.billing_history.map(b => `
     <tr>
       <td>${b.billing_code}</td>
       <td>${b.student_name} (${b.student_id_number})</td>
       <td>${peso(b.total_amount)}</td>
-      <td>${b.confirmed_by_name || '—'} ${b.confirmed_by_role ? `<span class="tag ${b.confirmed_by_role === 'admin' ? 'tag-active' : 'tag-draft'}">${b.confirmed_by_role}</span>` : ''}</td>
+      <td>${b.receipt_number || '—'}</td>
+      <td>${b.confirmed_by_name || '—'}</td>
       <td>${b.confirmed_at ? new Date(b.confirmed_at).toLocaleString() : '—'}</td>
+      <td>${b.receipt_number ? `<button class="btn btn-outline btn-sm" onclick="viewReceipt(${b.id}, '${b.receipt_number}')">View receipt</button>` : ''}</td>
     </tr>`).join('');
 }
 
@@ -231,7 +306,7 @@ async function loadFilterOptions() {
 
 function resetFilters() {
   document.getElementById('groupBy').value = 'material';
-  ['f_material', 'f_department', 'f_program', 'f_semester', 'f_academic_year'].forEach(id => document.getElementById(id).value = document.getElementById(id).options[0].value);
+  ['f_material', 'f_department', 'f_program', 'f_year_level', 'f_semester', 'f_academic_year'].forEach(id => document.getElementById(id).value = document.getElementById(id).options[0].value);
   document.getElementById('f_date_from').value = '';
   document.getElementById('f_date_to').value = '';
   loadReport();
@@ -243,6 +318,7 @@ function currentFilterParams() {
     material_id: document.getElementById('f_material').value,
     department_id: document.getElementById('f_department').value,
     program_id: document.getElementById('f_program').value,
+    year_level: document.getElementById('f_year_level').value,
     semester: document.getElementById('f_semester').value,
     academic_year: document.getElementById('f_academic_year').value,
     date_from: document.getElementById('f_date_from').value,
@@ -281,6 +357,7 @@ function printReport() {
     f.material_id ? `Material: ${document.getElementById('f_material').selectedOptions[0].text}` : null,
     f.department_id ? `Department: ${document.getElementById('f_department').selectedOptions[0].text}` : null,
     f.program_id ? `Program: ${document.getElementById('f_program').selectedOptions[0].text}` : null,
+    f.year_level ? `Year Level: ${f.year_level}` : null,
     f.semester ? `Semester: ${f.semester}` : null,
     f.academic_year ? `Academic Year: ${f.academic_year}` : null,
     f.date_from ? `From: ${f.date_from}` : null,

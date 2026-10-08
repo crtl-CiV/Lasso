@@ -34,7 +34,6 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   if (r.success) {
     const role = r.user.role;
     if (role === 'admin') window.location.href = '/admin/dashboard.html';
-    else if (role === 'cashier') window.location.href = '/cashier/dashboard.html';
     else window.location.href = '/student/store.html';
   } else {
     box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;

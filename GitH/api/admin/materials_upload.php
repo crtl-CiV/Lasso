@@ -90,7 +90,7 @@ $title = trim($_POST['title'] ?? '');
 $description = trim($_POST['description'] ?? '');
 $departmentId = (int)($_POST['department_id'] ?? 0) ?: null;
 $programId = (int)($_POST['program_id'] ?? 0) ?: null;
-$yearLevel = trim($_POST['year_level'] ?? '');
+$yearRange = parseYearRange($_POST['year_level'] ?? '');
 $price = (float)($_POST['price'] ?? 0);
 $authorName = trim($_POST['author_name'] ?? '');
 $nonBodyPages = json_decode($_POST['non_body_pages'] ?? '[]', true) ?: [];
@@ -98,6 +98,9 @@ $previewExcluded = json_decode($_POST['preview_excluded_pages'] ?? '[]', true) ?
 
 if (!$title || $price < 0) respond(false, 'Title and a valid price are required.', 422);
 if (!$authorName) respond(false, 'Author name is required.', 422);
+if (!$yearRange) respond(false, 'Please choose the year level this material is for.', 422);
+[$yearMin, $yearMax] = $yearRange;
+$yearLevel = yearRangeLabel($yearMin, $yearMax);
 
 // Find-or-create the author by name, so the same author is reused
 // across materials (needed for accurate top-author ranking later).
@@ -121,10 +124,10 @@ if (!$hasPagesNow && !$expectMoreBatches) {
 
 $code = genCode('LM', 6);
 $stmt = $db->prepare("INSERT INTO instructional_materials
-    (material_code, title, description, department_id, program_id, year_level, price, author_id, total_pages, non_body_pages, preview_excluded_pages, status, uploaded_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'draft', ?)
+    (material_code, title, description, department_id, program_id, year_level, year_min, year_max, price, author_id, total_pages, non_body_pages, preview_excluded_pages, status, uploaded_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'draft', ?)
     RETURNING id");
-$stmt->execute([$code, $title, $description, $departmentId, $programId, $yearLevel, $price, $authorId, json_encode($nonBodyPages), json_encode($previewExcluded), $admin['id']]);
+$stmt->execute([$code, $title, $description, $departmentId, $programId, $yearLevel, $yearMin, $yearMax, $price, $authorId, json_encode($nonBodyPages), json_encode($previewExcluded), $admin['id']]);
 $materialId = (int)$stmt->fetchColumn();
 
 $coverPath = saveCover($materialId);

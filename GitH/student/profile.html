@@ -22,13 +22,9 @@
   <h1>Profile</h1>
 
   <div class="card">
-    <h2>Submit Validation Code</h2>
-    <p class="muted">Once the cashier confirms your payment, submit your validation code here to unlock full access.</p>
-    <div id="valAlert"></div>
-    <form id="valForm" style="display:flex; gap:8px;">
-      <input type="text" id="valCode" placeholder="e.g. VAL-XXXXXXXXXX" style="flex:1;" required>
-      <button class="btn btn-gold" type="submit">Submit</button>
-    </form>
+    <h2>Payments &amp; Receipts</h2>
+    <p class="muted">After paying at the school cashier, submit your official receipt (OR) for each billing. An administrator will check it and unlock your materials.</p>
+    <div id="receiptBox"></div>
   </div>
 
   <div class="card">
@@ -42,6 +38,24 @@
       <label>Profile Photo</label>
       <input type="file" id="profile_photo" accept="image/*">
       <button class="btn btn-primary" style="margin-top:14px;" type="submit">Save Changes</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Year Level</h2>
+    <p class="muted">Your year level decides which instructional materials you can see. To change it, submit a photo of your ID validated for the new year level. An administrator will review it.</p>
+    <p>Current year level: <b id="curYear">—</b></p>
+    <div id="yrStatus"></div>
+    <div id="yrAlert"></div>
+    <form id="yrForm">
+      <label>Request year level</label>
+      <select id="yr_requested" required>
+        <option value="">Select year level…</option>
+        <option>1st Year</option><option>2nd Year</option><option>3rd Year</option><option>4th Year</option><option>5th Year</option>
+      </select>
+      <label>ID photo validated for that year level</label>
+      <input type="file" id="yr_photo" accept="image/*" required>
+      <button class="btn btn-primary" style="margin-top:14px;" type="submit" id="yrSubmit">Submit Request</button>
     </form>
   </div>
 
@@ -65,6 +79,28 @@ async function init() {
   document.getElementById('full_name').value = me.full_name;
   document.getElementById('section').value = me.section;
   await refreshCartBadge();
+  await loadYearStatus();
+  await loadReceipts();
+}
+
+async function loadYearStatus() {
+  const r = await apiGet('/auth/year_request_status.php');
+  if (!r.success) return;
+  document.getElementById('curYear').textContent = r.current_year_level;
+  const q = r.latest_request;
+  const box = document.getElementById('yrStatus');
+  const form = document.getElementById('yrForm');
+  form.style.display = 'block';
+  box.innerHTML = '';
+  if (!q) return;
+  if (q.status === 'pending') {
+    box.innerHTML = `<div class="alert alert-info">Your request to move to <b>${q.requested_year_level}</b> is waiting for administrator review.</div>`;
+    form.style.display = 'none';
+  } else if (q.status === 'rejected') {
+    box.innerHTML = `<div class="alert alert-error">Your last request (${q.requested_year_level}) was rejected${q.review_note ? ': ' + q.review_note : '.'} You can submit a new one below.</div>`;
+  } else {
+    box.innerHTML = `<div class="alert alert-success">Your last request (${q.requested_year_level}) was approved.</div>`;
+  }
 }
 
 async function refreshCartBadge() {
@@ -74,14 +110,54 @@ async function refreshCartBadge() {
   else badge.style.display = 'none';
 }
 
-document.getElementById('valForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const box = document.getElementById('valAlert');
-  const code = document.getElementById('valCode').value.trim();
-  const r = await apiPost('/subscription/validate.php', { code });
-  box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${r.message}</div>`;
-  if (r.success) document.getElementById('valCode').value = '';
-});
+async function loadReceipts() {
+  const r = await apiGet('/subscription/status.php');
+  const box = document.getElementById('receiptBox');
+  if (!r.success || !r.pending_billings.length) {
+    box.innerHTML = '<p class="muted" style="margin:0;">No billings are waiting for a receipt.</p>';
+    return;
+  }
+  box.innerHTML = r.pending_billings.map(b => {
+    let status, form = '';
+    if (b.receipt_status === 'submitted') {
+      status = `<div class="alert alert-info">Receipt (OR ${b.receipt_number}) submitted — waiting for administrator review.</div>`;
+    } else {
+      if (b.receipt_status === 'rejected') {
+        status = `<div class="alert alert-error">Your receipt was rejected${b.receipt_note ? ': ' + b.receipt_note : '.'} Please submit it again.</div>`;
+      } else {
+        status = `<p class="muted" style="margin:6px 0;">Pay at the school cashier using this billing, then submit the OR you receive.</p>`;
+      }
+      form = `
+        <form class="rcpForm" data-code="${b.billing_code}">
+          <label>OR number</label>
+          <input type="text" name="receipt_number" required placeholder="Number printed on your receipt">
+          <label>Photo of the receipt</label>
+          <input type="file" name="receipt_photo" accept="image/*" required>
+          <button class="btn btn-gold" style="margin-top:12px;" type="submit">Submit Receipt</button>
+        </form>`;
+    }
+    return `
+      <div class="card" style="border-left:4px solid var(--gold); margin:12px 0 0;">
+        <b>Billing ${b.billing_code}</b> — ${peso(b.total_amount)}
+        ${status}${form}
+        <div class="rcpMsg"></div>
+      </div>`;
+  }).join('');
+
+  box.querySelectorAll('.rcpForm').forEach(f => f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(f);
+    fd.append('billing_code', f.dataset.code);
+    const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Submitting…';
+    const res = await fetch('/api/cart/submit_receipt.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+    const out = await res.json();
+    if (out.success) { toast(out.message, 'success'); loadReceipts(); }
+    else {
+      btn.disabled = false; btn.textContent = 'Submit Receipt';
+      f.closest('.card').querySelector('.rcpMsg').innerHTML = `<div class="alert alert-error">${out.message}</div>`;
+    }
+  }));
+}
 
 document.getElementById('profForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -94,6 +170,22 @@ document.getElementById('profForm').addEventListener('submit', async (e) => {
   const res = await fetch('/api/auth/update_profile.php', { method: 'POST', body: fd, credentials: 'same-origin' });
   const r = await res.json();
   box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${r.success ? 'Profile updated.' : r.message}</div>`;
+});
+
+document.getElementById('yrForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const box = document.getElementById('yrAlert');
+  const fd = new FormData();
+  fd.append('requested_year_level', document.getElementById('yr_requested').value);
+  const photo = document.getElementById('yr_photo').files[0];
+  if (photo) fd.append('id_photo', photo);
+  const btn = document.getElementById('yrSubmit');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  const res = await fetch('/api/auth/year_request_submit.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+  const r = await res.json();
+  btn.disabled = false; btn.textContent = 'Submit Request';
+  box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${r.message}</div>`;
+  if (r.success) { e.target.reset(); loadYearStatus(); }
 });
 
 document.getElementById('pwForm').addEventListener('submit', async (e) => {

@@ -4,9 +4,8 @@ $user = requireStudent();
 $db = getDB();
 
 $stmt = $db->prepare("SELECT b.id, b.billing_code, b.total_amount, b.semester, b.academic_year, b.status, b.created_at,
-                              v.status AS code_status
+                              b.receipt_status, b.receipt_number, b.receipt_note
                        FROM billing_statements b
-                       LEFT JOIN validation_codes v ON v.billing_id = b.id
                        WHERE b.student_id = ?
                        ORDER BY b.created_at DESC");
 $stmt->execute([$user['id']]);

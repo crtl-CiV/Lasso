@@ -14,8 +14,15 @@ if (!$stmt->fetch()) respond(false, 'Material not found.', 404);
 
 $fields = [];
 $params = [];
-foreach (['title','description','price','year_level'] as $f) {
+foreach (['title','description','price'] as $f) {
     if (isset($in[$f])) { $fields[] = "$f = ?"; $params[] = $in[$f]; }
+}
+if (isset($in['year_level'])) {
+    $yr = parseYearRange((string)$in['year_level']);
+    if (!$yr) respond(false, 'Please choose a valid year level.', 422);
+    $fields[] = "year_level = ?"; $params[] = yearRangeLabel($yr[0], $yr[1]);
+    $fields[] = "year_min = ?";   $params[] = $yr[0];
+    $fields[] = "year_max = ?";   $params[] = $yr[1];
 }
 if (isset($in['department_id'])) { $fields[] = "department_id = ?"; $params[] = (int)$in['department_id'] ?: null; }
 if (isset($in['program_id'])) { $fields[] = "program_id = ?"; $params[] = (int)$in['program_id'] ?: null; }

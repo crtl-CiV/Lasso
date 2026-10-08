@@ -14,7 +14,6 @@
     <a href="/admin/materials.html">Materials</a>
     <a href="/admin/users.html" class="active">Users</a>
     <a href="/admin/sales.html">Sales</a>
-    <div id="notifBell" style="position:relative; margin-right:6px;"></div>
     <button onclick="logout('/index.html')">Logout</button>
   </nav>
 </div>
@@ -28,7 +27,7 @@
   <div class="tabs">
     <button class="active" onclick="switchTab('students', this)">Students</button>
     <button onclick="switchTab('admins', this)">Administrators</button>
-    <button onclick="switchTab('cashiers', this)">Cashiers</button>
+    <button onclick="switchTab('requests', this)" id="requestsTab">Year Level Requests</button>
   </div>
 
   <div class="card">
@@ -37,7 +36,7 @@
 </div>
 
 <div id="modalBackdrop" class="modal-backdrop" style="display:none;">
-  <div class="modal" id="modalContent"></div>
+  <div class="modal" id="modalContent" style="max-width:700px;"></div>
 </div>
 
 <script src="/assets/js/api.js"></script>
@@ -46,8 +45,8 @@ let currentType = 'students';
 
 async function init() {
   await requireAuth('admin');
-  initNotificationBell('notifBell');
   await loadUsers();
+  refreshRequestCount();
 }
 
 function switchTab(type, btn) {
@@ -57,12 +56,17 @@ function switchTab(type, btn) {
   loadUsers();
 }
 
+async function refreshRequestCount() {
+  const r = await apiGet('/admin/year_requests_list.php');
+  const n = r.success ? r.requests.length : 0;
+  document.getElementById('requestsTab').textContent = n ? `Year Level Requests (${n})` : 'Year Level Requests';
+}
+
 async function loadUsers() {
-  // 'cashiers' isn't its own backend type — administrators already carries a
-  // role column, so we fetch the same admins list and filter client-side.
-  const fetchType = currentType === 'cashiers' ? 'admins' : currentType;
-  const r = await apiGet(`/admin/users_list.php?type=${fetchType}`);
   const table = document.getElementById('usersTable');
+  if (currentType === 'requests') return loadRequests(table);
+
+  const r = await apiGet(`/admin/users_list.php?type=${currentType}`);
   if (!r.success) { table.innerHTML = `<tr><td>${r.message}</td></tr>`; return; }
 
   if (currentType === 'students') {
@@ -75,7 +79,8 @@ async function loadUsers() {
           <td>${s.year_level} - ${s.section}</td>
           <td>${s.active_subscriptions}</td>
           <td><span class="tag ${s.status === 'active' ? 'tag-active' : 'tag-trashed'}">${s.status}</span></td>
-          <td>
+          <td style="white-space:nowrap;">
+            <button class="btn btn-outline btn-sm" onclick='viewSubscriptions(${s.id}, ${JSON.stringify(s.full_name).replace(/'/g, "&#39;")})'>Subscriptions</button>
             ${s.status === 'active'
               ? `<button class="btn btn-danger btn-sm" onclick="userAction(${s.id},'student','trash')">Trash</button>`
               : `<button class="btn btn-outline btn-sm" onclick="userAction(${s.id},'student','restore')">Restore</button>
@@ -83,15 +88,12 @@ async function loadUsers() {
           </td>
         </tr>`).join('') || '<tr><td colspan="7" class="muted">No students yet.</td></tr>'}</tbody>`;
   } else {
-    const rows = currentType === 'cashiers' ? r.admins.filter(a => a.role === 'cashier') : r.admins;
-    const emptyMsg = currentType === 'cashiers' ? 'No cashiers registered yet.' : 'No administrators yet.';
-    table.innerHTML = `<thead><tr><th>Admin ID</th><th>Name</th><th>Email</th><th>Role</th><th>Position</th><th>Status</th><th></th></tr></thead>
-      <tbody>${rows.map(a => `
+    table.innerHTML = `<thead><tr><th>Admin ID</th><th>Name</th><th>Email</th><th>Position</th><th>Status</th><th></th></tr></thead>
+      <tbody>${r.admins.map(a => `
         <tr>
           <td>${a.admin_id}</td>
           <td>${a.full_name}</td>
           <td>${a.email || '—'}</td>
-          <td><span class="tag ${a.role === 'admin' ? 'tag-active' : 'tag-draft'}">${a.role}</span></td>
           <td>${a.position}</td>
           <td><span class="tag ${a.status === 'active' ? 'tag-active' : 'tag-trashed'}">${a.status}</span></td>
           <td>
@@ -100,8 +102,72 @@ async function loadUsers() {
               : `<button class="btn btn-outline btn-sm" onclick="userAction(${a.id},'admin','restore')">Restore</button>
                  <button class="btn btn-danger btn-sm" onclick="confirmUserDelete(${a.id},'admin')">Delete Permanently</button>`}
           </td>
-        </tr>`).join('') || `<tr><td colspan="7" class="muted">${emptyMsg}</td></tr>`}</tbody>`;
+        </tr>`).join('') || '<tr><td colspan="6" class="muted">No administrators yet.</td></tr>'}</tbody>`;
   }
+}
+
+/* ---------- Year level requests ---------- */
+async function loadRequests(table) {
+  const r = await apiGet('/admin/year_requests_list.php?status=all');
+  if (!r.success) { table.innerHTML = `<tr><td>${r.message}</td></tr>`; return; }
+  const tag = { pending: 'tag-draft', approved: 'tag-active', rejected: 'tag-trashed' };
+  table.innerHTML = `<thead><tr><th>Student</th><th>Change</th><th>Submitted</th><th>Status</th><th></th></tr></thead>
+    <tbody>${r.requests.map(q => `
+      <tr>
+        <td>${q.full_name}<div class="muted">${q.student_id_number}</div></td>
+        <td>${q.current_year_level} &rarr; <b>${q.requested_year_level}</b></td>
+        <td>${new Date(q.created_at).toLocaleString()}</td>
+        <td><span class="tag ${tag[q.status]}">${q.status}</span>
+            ${q.status !== 'pending' ? `<div class="muted">by ${q.reviewed_by_name || '—'}${q.review_note ? ' — ' + q.review_note : ''}</div>` : ''}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-outline btn-sm" onclick="viewProof(${q.id})">View ID</button>
+          ${q.status === 'pending' ? `
+            <button class="btn btn-primary btn-sm" onclick="decideRequest(${q.id}, 'approve')">Approve</button>
+            <button class="btn btn-danger btn-sm" onclick="decideRequest(${q.id}, 'reject')">Reject</button>` : ''}
+        </td>
+      </tr>`).join('') || '<tr><td colspan="5" class="muted">No year level requests yet.</td></tr>'}</tbody>`;
+}
+
+function viewProof(id) {
+  document.getElementById('modalContent').innerHTML = `
+    <h2>ID photo</h2>
+    <img src="/api/admin/year_request_photo.php?id=${id}" alt="ID photo" style="width:100%; border-radius:8px; border:1px solid #e5e7eb;">
+    <button class="btn btn-outline btn-block" style="margin-top:14px;" onclick="closeModal()">Close</button>`;
+  document.getElementById('modalBackdrop').style.display = 'flex';
+}
+
+async function decideRequest(id, action) {
+  let note = '';
+  if (action === 'reject') {
+    note = prompt('Reason for rejecting (shown to the student):') ;
+    if (note === null) return;
+  } else if (!confirm('Approve this request and update the student\'s year level?')) return;
+  const r = await apiPost('/admin/year_request_action.php', { id, action, note });
+  if (r.success) { toast(r.message, 'success'); loadUsers(); refreshRequestCount(); }
+  else toast(r.message, 'error');
+}
+
+/* ---------- Student subscriptions ---------- */
+async function viewSubscriptions(studentId, name) {
+  const r = await apiGet(`/admin/subscription_status.php?student_id=${studentId}`);
+  const rows = r.success ? r.subscriptions : [];
+  document.getElementById('modalContent').innerHTML = `
+    <h2>${name} — Subscriptions</h2>
+    <div style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>Material</th><th>Subscribed</th><th>Expires</th><th>Time left</th><th>Terms</th><th>Status</th></tr></thead>
+      <tbody>${rows.length ? rows.map(s => `
+        <tr>
+          <td>${s.title}<div class="muted">${s.material_code}</div></td>
+          <td>${s.start_date}</td>
+          <td>${s.expiry_date}</td>
+          <td>${durationText(s.expiry_date)}</td>
+          <td>${s.semester_count}</td>
+          <td><span class="tag ${subIsActive(s) ? 'tag-active' : 'tag-expired'}">${subIsActive(s) ? 'active' : 'expired'}</span></td>
+        </tr>`).join('') : '<tr><td colspan="6" class="muted">This student has no subscriptions yet.</td></tr>'}</tbody>
+    </table></div>
+    <button class="btn btn-outline btn-block" style="margin-top:14px;" onclick="closeModal()">Close</button>`;
+  document.getElementById('modalBackdrop').style.display = 'flex';
 }
 
 function confirmUserDelete(id, type) {
@@ -118,17 +184,12 @@ async function userAction(id, type, action) {
 
 function openNewAdminModal() {
   document.getElementById('modalContent').innerHTML = `
-    <h2>Register Admin/Cashier Account</h2>
+    <h2>Register Admin Account</h2>
     <form id="newAdminForm">
       <label>Admin ID</label><input type="text" id="na_id" required>
       <label>Email</label><input type="email" id="na_email" required placeholder="e.g. name@example.com">
       <label>Full Name</label><input type="text" id="na_name" required>
       <label>Position</label><input type="text" id="na_position" required>
-      <label>Role</label>
-      <select id="na_role">
-        <option value="admin">Admin</option>
-        <option value="cashier">Cashier</option>
-      </select>
       <label>Password</label><input type="password" id="na_password" minlength="8" required>
       <div id="naAlert"></div>
       <div style="display:flex; gap:10px; margin-top:14px;">
@@ -145,7 +206,6 @@ function openNewAdminModal() {
       email: document.getElementById('na_email').value.trim(),
       full_name: document.getElementById('na_name').value.trim(),
       position: document.getElementById('na_position').value.trim(),
-      role: document.getElementById('na_role').value,
       password: document.getElementById('na_password').value,
     });
     const box = document.getElementById('naAlert');

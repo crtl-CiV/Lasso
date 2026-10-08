@@ -13,11 +13,16 @@ $stmt->execute([$materialId]);
 $m = $stmt->fetch();
 if (!$m) respond(false, 'Material not found.', 404);
 
-$stmt = $db->prepare("SELECT status FROM subscriptions WHERE student_id = ? AND material_id = ? AND status='active'");
+$stmt = $db->prepare("SELECT status FROM subscriptions WHERE student_id = ? AND material_id = ? AND status='active' AND expiry_date >= CURRENT_DATE");
 $stmt->execute([$user['id'], $materialId]);
 $subscribed = (bool)$stmt->fetch();
 
 if (!$subscribed) {
+    $stmt = $db->prepare("SELECT 1 FROM subscriptions WHERE student_id = ? AND material_id = ?");
+    $stmt->execute([$user['id'], $materialId]);
+    if (!$stmt->fetch() && (int)$m['year_min'] > studentYearInt($db, (int)$user['id'])) {
+        respond(false, 'This material is not available for your year level.', 403);
+    }
     $nonBody = json_decode($m['non_body_pages'] ?? '[]', true) ?: [];
     $excluded = json_decode($m['preview_excluded_pages'] ?? '[]', true) ?: [];
     $bodyPages = [];

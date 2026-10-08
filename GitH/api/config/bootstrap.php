@@ -47,14 +47,6 @@ function requireAdmin(): array {
     return $_SESSION['user'];
 }
 
-/** Allows either an admin or a cashier — for the handful of endpoints both roles share. */
-function requireStaff(): array {
-    if (empty($_SESSION['user']) || !in_array($_SESSION['user']['role'], ['admin', 'cashier'], true)) {
-        respond(false, 'You must be logged in as staff.', 401);
-    }
-    return $_SESSION['user'];
-}
-
 function genCode(string $prefix, int $len = 8): string {
     $chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     $s = '';
@@ -78,3 +70,37 @@ function currentTerm(): array {
     }
     return [$sem, $ay];
 }
+
+
+// ---------------- Year level helpers ----------------
+const YEAR_LABELS = [1 => '1st Year', 2 => '2nd Year', 3 => '3rd Year', 4 => '4th Year', 5 => '5th Year'];
+
+/** '3rd Year' -> 3 (0 if unrecognised). */
+function yearToInt(?string $label): int {
+    $n = (int)substr(trim((string)$label), 0, 1);
+    return ($n >= 1 && $n <= 5) ? $n : 0;
+}
+
+/** Parses a material year-level code like "2" or "1-3" into [min, max], or null if invalid. */
+function parseYearRange(string $code): ?array {
+    if (!preg_match('/^([1-5])(?:-([1-5]))?$/', trim($code), $m)) return null;
+    $min = (int)$m[1];
+    $max = isset($m[2]) && $m[2] !== '' ? (int)$m[2] : $min;
+    return $min <= $max ? [$min, $max] : null;
+}
+
+/** Display label: "1st Year" or "1st - 3rd Year". */
+function yearRangeLabel(int $min, int $max): string {
+    $short = [1 => '1st', 2 => '2nd', 3 => '3rd', 4 => '4th', 5 => '5th'];
+    return $min === $max ? $short[$min] . ' Year' : $short[$min] . ' - ' . $short[$max] . ' Year';
+}
+
+/** Fresh year level for a student, read from the DB (the session copy can be stale after an approved change). */
+function studentYearInt(PDO $db, int $studentId): int {
+    $st = $db->prepare('SELECT year_level FROM students WHERE id = ?');
+    $st->execute([$studentId]);
+    return yearToInt($st->fetchColumn());
+}
+
+/** A subscription only counts as active while its status is active AND it has not passed its expiry date. */
+const SUB_ACTIVE_SQL = "status = 'active' AND expiry_date >= CURRENT_DATE";

@@ -25,6 +25,13 @@ if ($action === 'delete') {
         respond(false, 'Move this account to trash first before deleting it permanently.', 422);
     }
 
+    $proofPaths = [];
+    if ($type === 'student') {
+        $ps = $db->prepare("SELECT id_photo FROM year_level_requests WHERE student_id = ?");
+        $ps->execute([$id]);
+        $proofPaths = $ps->fetchAll(PDO::FETCH_COLUMN);
+    }
+
     try {
         $db->prepare("DELETE FROM $table WHERE id=?")->execute([$id]);
     } catch (PDOException $e) {
@@ -36,6 +43,7 @@ if ($action === 'delete') {
     }
 
     // Best-effort cleanup of their files in Supabase Storage (students only)
+    if ($proofPaths) deleteStorageObjects(STORAGE_MATERIALS_BUCKET, $proofPaths);
     if ($type === 'student') {
         $paths = array_filter([$u['id_photo_front'] ?? null, $u['id_photo_back'] ?? null, $u['profile_photo'] ?? null]);
         if ($paths) deleteStorageObjects(STORAGE_PUBLIC_BUCKET, array_values($paths));

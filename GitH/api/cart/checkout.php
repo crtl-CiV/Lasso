@@ -27,12 +27,6 @@ try {
     $itemStmt = $db->prepare("INSERT INTO billing_statement_items (billing_id, material_id, price) VALUES (?, ?, ?)");
     foreach ($items as $it) $itemStmt->execute([$billingId, $it['id'], $it['price']]);
 
-    // Validation code: generated now, transmitted to "the cashier's office" (simulated —
-    // an administrator confirms payment via /api/admin/confirm_payment.php, which flips it to 'ready').
-    $code = genCode('VAL', 10);
-    $stmt = $db->prepare("INSERT INTO validation_codes (billing_id, student_id, code, status) VALUES (?, ?, ?, 'awaiting_payment')");
-    $stmt->execute([$billingId, $user['id'], $code]);
-
     $db->prepare("DELETE FROM cart_items WHERE student_id = ?")->execute([$user['id']]);
 
     $db->commit();
@@ -52,5 +46,5 @@ respond(true, [
         'academic_year' => $ay,
         'date' => date('Y-m-d H:i'),
     ],
-    'message' => 'Billing statement generated. Print it and present it at the cashier. Your validation code has been transmitted to the cashier\'s office and will be released to you once payment is confirmed.'
+    'message' => 'Billing statement generated. Print it and pay at the school cashier, then submit your official receipt (OR) from your Profile page to get access.'
 ]);

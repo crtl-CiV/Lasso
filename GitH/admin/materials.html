@@ -15,7 +15,6 @@
     <a href="/admin/materials.html" class="active">Materials</a>
     <a href="/admin/users.html">Users</a>
     <a href="/admin/sales.html">Sales</a>
-    <div id="notifBell" style="position:relative; margin-right:6px;"></div>
     <button onclick="logout('/index.html')">Logout</button>
   </nav>
 </div>
@@ -51,7 +50,7 @@ let currentStatus = 'all';
 
 async function init() {
   await requireAuth('admin');
-  initNotificationBell('notifBell');
+  document.getElementById('u_year').innerHTML = yearLevelOptionsHtml('', 'Select year level…');
   const r = await apiGet('/reference_data.php');
   if (r.success) refs = r;
   await loadMaterials();
@@ -84,7 +83,7 @@ function materialAdminCard(m) {
       <div class="cover">${m.is_promoted ? '<span class="promoted-tag">Featured</span>' : ''}${cover}</div>
       <div class="body">
         <div class="title">${m.title}</div>
-        <div class="meta">by ${m.author_name || '—'} • ${m.material_code} • ${m.total_pages || 0} page(s) • ${m.subscriber_count} subscribers</div>
+        <div class="meta">by ${m.author_name || '—'} • ${m.year_level || '—'} • ${m.material_code} • ${m.total_pages || 0} page(s) • ${m.subscriber_count} subscribers</div>
         <span class="tag ${tagClass}">${m.status}</span>
         <div class="price">${peso(m.price)}</div>
       </div>
@@ -142,7 +141,7 @@ function openUploadModal() {
         <div><label>Program</label><select id="u_program"><option value="">—</option>${progOpts}</select></div>
       </div>
       <div class="form-row">
-        <div><label>Year Level</label><input type="text" id="u_year" placeholder="e.g. 3rd Year"></div>
+        <div><label>Year Level</label><select id="u_year" required></select></div>
         <div><label>Price (₱)</label><input type="number" id="u_price" min="0" step="0.01" required></div>
       </div>
       <label>Cover Image <span class="muted">(optional — first PDF page is used if left blank)</span></label>
@@ -245,6 +244,7 @@ async function handleUploadSubmit(e) {
   const mode = document.getElementById('uploadForm').dataset.mode || 'pdf';
   const fields = commonFields();
   if (!fields.title || fields.price === '') { box.innerHTML = `<div class="alert alert-error">Title and price are required.</div>`; return; }
+  if (!fields.year_level) { box.innerHTML = `<div class="alert alert-error">Year level is required.</div>`; return; }
   if (!fields.author_name) { box.innerHTML = `<div class="alert alert-error">Author is required.</div>`; return; }
 
   const submitBtn = document.getElementById('uploadSubmitBtn');
@@ -437,7 +437,7 @@ function openEditModal(m) {
         <div><label>Program</label><select id="e_program"><option value="">—</option>${progOpts}</select></div>
       </div>
       <div class="form-row">
-        <div><label>Year Level</label><input type="text" id="e_year" value="${m.year_level || ''}"></div>
+        <div><label>Year Level</label><select id="e_year" required>${yearLevelOptionsHtml(materialYearCode(m))}</select></div>
         <div><label>Price (₱)</label><input type="number" id="e_price" min="0" step="0.01" value="${m.price}"></div>
       </div>
       <div style="display:flex; gap:10px; margin-top:14px;">

@@ -7,11 +7,17 @@ if (!$materialId) respond(false, 'Material not specified.', 422);
 
 $db = getDB();
 
-$stmt = $db->prepare("SELECT id FROM instructional_materials WHERE id=? AND status='published'");
+$stmt = $db->prepare("SELECT id, year_min FROM instructional_materials WHERE id=? AND status='published'");
 $stmt->execute([$materialId]);
-if (!$stmt->fetch()) respond(false, 'Material not available.', 404);
+$mat = $stmt->fetch();
+if (!$mat) respond(false, 'Material not available.', 404);
 
-$stmt = $db->prepare("SELECT id FROM subscriptions WHERE student_id=? AND material_id=? AND status='active'");
+// Year-level exclusivity (students may buy their own year and anything below it)
+if ((int)$mat['year_min'] > studentYearInt($db, (int)$user['id'])) {
+    respond(false, 'This material is not available for your year level.', 403);
+}
+
+$stmt = $db->prepare("SELECT id FROM subscriptions WHERE student_id=? AND material_id=? AND status='active' AND expiry_date >= CURRENT_DATE");
 $stmt->execute([$user['id'], $materialId]);
 if ($stmt->fetch()) respond(false, 'You already have an active subscription to this material.', 409);
 

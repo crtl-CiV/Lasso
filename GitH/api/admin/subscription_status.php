@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/bootstrap.php';
-requireStaff();
+requireAdmin();
 $db = getDB();
 
 $studentId = (int)($_GET['student_id'] ?? 0);
@@ -14,7 +14,7 @@ if ($studentId) {
 
 // Per-material subscriber counts, institution-wide overview
 $rows = $db->query("SELECT m.id, m.material_code, m.title,
-                            SUM(CASE WHEN s.status='active' THEN 1 ELSE 0 END) AS active_subscribers,
+                            SUM(CASE WHEN s.status='active' AND s.expiry_date >= CURRENT_DATE THEN 1 ELSE 0 END) AS active_subscribers,
                             COUNT(s.id) AS total_ever_subscribed
                      FROM instructional_materials m
                      LEFT JOIN subscriptions s ON s.material_id = m.id
