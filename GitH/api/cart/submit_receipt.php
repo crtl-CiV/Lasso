@@ -31,7 +31,7 @@ $stmt = $db->prepare("SELECT 1 FROM billing_statements WHERE receipt_number = ? 
 $stmt->execute([$orNumber, $b['id']]);
 if ($stmt->fetch()) respond(false, 'This OR number has already been used for another billing.', 409);
 
-$objectPath = 'receipts/' . $b['id'] . '_' . time() . '.' . $allowed[$mime];
+$objectPath = 'receipts/' . $b['id'] . '_' . time() . '_' . bin2hex(random_bytes(3)) . '.' . $allowed[$mime];
 if (!uploadToStorage(STORAGE_MATERIALS_BUCKET, $objectPath, $_FILES['receipt_photo']['tmp_name'], $mime)) {
     respond(false, 'Could not upload your receipt photo. Please try again.', 500);
 }
@@ -46,6 +46,6 @@ try {
 }
 
 // A rejected earlier photo is no longer needed
-if (!empty($b['receipt_photo'])) deleteStorageObjects(STORAGE_MATERIALS_BUCKET, [$b['receipt_photo']]);
+if (!empty($b['receipt_photo']) && $b['receipt_photo'] !== $objectPath) deleteStorageObjects(STORAGE_MATERIALS_BUCKET, [$b['receipt_photo']]);
 
 respond(true, ['message' => 'Receipt submitted. An administrator will review it and unlock your materials.']);

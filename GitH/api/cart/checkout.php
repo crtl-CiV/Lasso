@@ -4,12 +4,20 @@ $user = requireStudent();
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(false, 'Invalid request method.', 405);
 
 $db = getDB();
-$stmt = $db->prepare("SELECT m.id, m.title, m.price FROM cart_items c
+$stmt = $db->prepare("SELECT m.id, m.title, m.price, m.status, m.year_mask, m.semester_mask FROM cart_items c
                        JOIN instructional_materials m ON m.id = c.material_id
                        WHERE c.student_id = ?");
 $stmt->execute([$user['id']]);
 $items = $stmt->fetchAll();
 if (!$items) respond(false, 'Your cart is empty.', 422);
+
+// The semester may have changed since the item was added to the cart
+$bits = eligibilityBits($db, (int)$user['id']);
+$closed = array_filter($items, fn($it) => $it['status'] !== 'published' || !materialOpenTo($it, $bits));
+if ($closed) {
+    respond(false, 'No longer available for your year level or this semester: ' . implode(', ', array_column($closed, 'title')) . '. Please remove them from your cart.', 409);
+}
+$items = array_map(fn($it) => ['id' => $it['id'], 'title' => $it['title'], 'price' => $it['price']], $items);
 
 [$semester, $ay] = currentTerm();
 $total = array_sum(array_column($items, 'price'));

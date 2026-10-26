@@ -81,18 +81,32 @@ function yearToInt(?string $label): int {
     return ($n >= 1 && $n <= 5) ? $n : 0;
 }
 
-/** Parses a material year-level code like "2" or "1-3" into [min, max], or null if invalid. */
-function parseYearRange(string $code): ?array {
-    if (!preg_match('/^([1-5])(?:-([1-5]))?$/', trim($code), $m)) return null;
-    $min = (int)$m[1];
-    $max = isset($m[2]) && $m[2] !== '' ? (int)$m[2] : $min;
-    return $min <= $max ? [$min, $max] : null;
+/** Checkbox values like ["1","3"] (or "1,3") -> bitmask where bit n-1 means year/semester n.
+ *  Returns 0 when empty or when any value is out of range 1..$max. */
+function tagMask($values, int $max): int {
+    if (is_string($values)) $values = $values === '' ? [] : explode(',', $values);
+    if (!is_array($values)) return 0;
+    $mask = 0;
+    foreach ($values as $v) {
+        $n = (int)trim((string)$v);
+        if ($n < 1 || $n > $max) return 0;
+        $mask |= (1 << ($n - 1));
+    }
+    return $mask;
 }
 
-/** Display label: "1st Year" or "1st - 3rd Year". */
-function yearRangeLabel(int $min, int $max): string {
+/** "1st, 3rd Year" / "All Years" */
+function yearMaskLabel(int $mask): string {
+    if ($mask === 31) return 'All Years';
     $short = [1 => '1st', 2 => '2nd', 3 => '3rd', 4 => '4th', 5 => '5th'];
-    return $min === $max ? $short[$min] . ' Year' : $short[$min] . ' - ' . $short[$max] . ' Year';
+    $parts = [];
+    for ($n = 1; $n <= 5; $n++) if ($mask & (1 << ($n - 1))) $parts[] = $short[$n];
+    return $parts ? implode(', ', $parts) . ' Year' : '—';
+}
+
+/** "1st Semester" / "2nd Semester" / "1st & 2nd Semester" */
+function semesterMaskLabel(int $mask): string {
+    return $mask === 3 ? '1st & 2nd Semester' : ($mask === 1 ? '1st Semester' : ($mask === 2 ? '2nd Semester' : '—'));
 }
 
 /** Fresh year level for a student, read from the DB (the session copy can be stale after an approved change). */
@@ -104,3 +118,21 @@ function studentYearInt(PDO $db, int $studentId): int {
 
 /** A subscription only counts as active while its status is active AND it has not passed its expiry date. */
 const SUB_ACTIVE_SQL = "status = 'active' AND expiry_date >= CURRENT_DATE";
+
+/** 1 = 1st Semester, 2 = 2nd Semester, 0 = between semesters (Summer Term). */
+function currentSemesterInt(): int {
+    [$sem] = currentTerm();
+    return $sem === '1st Semester' ? 1 : ($sem === '2nd Semester' ? 2 : 0);
+}
+
+/** Who is asking: this student's year level and the semester happening right now, as single bits. */
+function eligibilityBits(PDO $db, int $studentId): array {
+    $y = studentYearInt($db, $studentId);
+    $s = currentSemesterInt();
+    return ['ybit' => $y ? (1 << ($y - 1)) : 0, 'sbit' => $s ? (1 << ($s - 1)) : 0];
+}
+
+/** Year + semester exclusivity: true only if the material is tagged for this student's year AND the current semester. */
+function materialOpenTo(array $m, array $bits): bool {
+    return (((int)$m['year_mask'] & $bits['ybit']) !== 0) && (((int)$m['semester_mask'] & $bits['sbit']) !== 0);
+}

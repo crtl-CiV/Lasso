@@ -5,9 +5,17 @@ $db = getDB();
 
 $studentId = (int)($_GET['student_id'] ?? 0);
 if ($studentId) {
-    $stmt = $db->prepare("SELECT m.title, m.material_code, s.semester_count, s.start_date, s.expiry_date, s.status
-                           FROM subscriptions s JOIN instructional_materials m ON m.id = s.material_id
-                           WHERE s.student_id = ? ORDER BY s.created_at DESC");
+    $stmt = $db->prepare("SELECT m.title, m.material_code, m.year_mask, m.semester_mask, au.name AS author_name,
+                                  s.semester_count, s.start_date, s.expiry_date, s.status,
+                                  (SELECT COALESCE(SUM(bi.price), 0) FROM billing_statement_items bi
+                                     JOIN billing_statements pb ON pb.id = bi.billing_id
+                                    WHERE bi.material_id = s.material_id AND pb.student_id = s.student_id AND pb.status = 'paid') AS total_paid,
+                                  lb.billing_code, lb.receipt_number, lb.confirmed_at
+                           FROM subscriptions s
+                           JOIN instructional_materials m ON m.id = s.material_id
+                           LEFT JOIN authors au ON au.id = m.author_id
+                           LEFT JOIN billing_statements lb ON lb.id = s.billing_id
+                           WHERE s.student_id = ? ORDER BY s.expiry_date DESC");
     $stmt->execute([$studentId]);
     respond(true, ['subscriptions' => $stmt->fetchAll()]);
 }

@@ -50,7 +50,6 @@ let currentStatus = 'all';
 
 async function init() {
   await requireAuth('admin');
-  document.getElementById('u_year').innerHTML = yearLevelOptionsHtml('', 'Select year level…');
   const r = await apiGet('/reference_data.php');
   if (r.success) refs = r;
   await loadMaterials();
@@ -75,7 +74,7 @@ function materialAdminCard(m) {
   }
   if (m.status === 'trashed') {
     actions += `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'restore')">Restore</button>`;
-    actions += `<button class="btn btn-danger btn-sm" onclick="confirmDelete(${m.id})">Delete Permanently</button>`;
+    actions += `<button class="btn btn-danger btn-sm" onclick="confirmDelete(${m.id}, ${m.subscriber_count || 0})">Delete Permanently</button>`;
   } else actions += `<button class="btn btn-danger btn-sm" onclick="doAction(${m.id},'trash')">Trash</button>`;
 
   return `
@@ -83,12 +82,13 @@ function materialAdminCard(m) {
       <div class="cover">${m.is_promoted ? '<span class="promoted-tag">Featured</span>' : ''}${cover}</div>
       <div class="body">
         <div class="title">${m.title}</div>
-        <div class="meta">by ${m.author_name || '—'} • ${m.year_level || '—'} • ${m.material_code} • ${m.total_pages || 0} page(s) • ${m.subscriber_count} subscribers</div>
+        <div class="meta">by ${m.author_name || '—'} • ${m.material_code} • ${m.total_pages || 0} page(s) • ${m.subscriber_count} subscribers</div>
+        <div class="tags"><span class="tag tag-year">${yearMaskLabel(m.year_mask)}</span> <span class="tag tag-sem">${semesterMaskLabel(m.semester_mask)}</span></div>
         <span class="tag ${tagClass}">${m.status}</span>
         <div class="price">${peso(m.price)}</div>
       </div>
       <div class="actions" style="flex-wrap:wrap;">
-        <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(m)})'>Edit</button>
+        <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(m).replace(/'/g, "&#39;")})'>Edit</button>
         <button class="btn btn-outline btn-sm" onclick="openAddPagesModal(${m.id}, '${m.title.replace(/'/g, "\\'")}')">Add Pages</button>
         ${actions}
       </div>
@@ -102,14 +102,15 @@ async function loadMaterials() {
   grid.innerHTML = r.materials.length ? r.materials.map(materialAdminCard).join('') : '<div class="empty-state">No materials here.</div>';
 }
 
-function confirmDelete(id) {
-  if (confirm('This will permanently delete this material and its files. This cannot be undone. Continue?')) {
-    doAction(id, 'delete');
-  }
+function confirmDelete(id, activeSubs) {
+  const warn = activeSubs > 0
+    ? `WARNING: this material still has ${activeSubs} active subscriber(s).\n\nDeleting it permanently removes their access, their reading progress and the related sales records, together with the material's files. This cannot be undone.\n\nDelete it anyway?`
+    : 'This will permanently delete this material and its files. This cannot be undone.\n\nDelete it?';
+  if (confirm(warn)) doAction(id, 'delete', { force: true });
 }
 
-async function doAction(id, action) {
-  const r = await apiPost('/admin/materials_action.php', { id, action });
+async function doAction(id, action, extra) {
+  const r = await apiPost('/admin/materials_action.php', Object.assign({ id, action }, extra || {}));
   if (r.success) { toast(r.message, 'success'); loadMaterials(); }
   else toast(r.message, 'error');
 }
@@ -138,12 +139,16 @@ function openUploadModal() {
       <label>Description</label><textarea id="u_description" rows="3"></textarea>
       <div class="form-row">
         <div><label>Department</label><select id="u_department"><option value="">—</option>${depOpts}</select></div>
-        <div><label>Program</label><select id="u_program"><option value="">—</option>${progOpts}</select></div>
+        <div><label>Course</label><select id="u_program"><option value="">—</option>${progOpts}</select></div>
       </div>
       <div class="form-row">
-        <div><label>Year Level</label><select id="u_year" required></select></div>
         <div><label>Price (₱)</label><input type="number" id="u_price" min="0" step="0.01" required></div>
+        <div></div>
       </div>
+      <label>Accessible to year level(s) <span class="req">*</span> <span class="muted">(tick every year that may see this material)</span></label>
+      ${tagCheckboxesHtml('u_years', YEAR_TAGS, [])}
+      <label>Accessible during semester(s) <span class="req">*</span> <span class="muted">(the material is hidden from students outside these)</span></label>
+      ${tagCheckboxesHtml('u_sems', SEMESTER_TAGS, [])}
       <label>Cover Image <span class="muted">(optional — first PDF page is used if left blank)</span></label>
       <input type="file" id="u_cover" accept="image/*">
 
@@ -207,7 +212,8 @@ function commonFields() {
     description: document.getElementById('u_description').value.trim(),
     department_id: document.getElementById('u_department').value,
     program_id: document.getElementById('u_program').value,
-    year_level: document.getElementById('u_year').value.trim(),
+    year_levels: checkedTags('u_years').join(','),
+    semesters: checkedTags('u_sems').join(','),
     price: document.getElementById('u_price').value,
     non_body_pages: JSON.stringify(toArr(document.getElementById('u_nonbody').value)),
     preview_excluded_pages: JSON.stringify(toArr(document.getElementById('u_excluded').value)),
@@ -244,7 +250,8 @@ async function handleUploadSubmit(e) {
   const mode = document.getElementById('uploadForm').dataset.mode || 'pdf';
   const fields = commonFields();
   if (!fields.title || fields.price === '') { box.innerHTML = `<div class="alert alert-error">Title and price are required.</div>`; return; }
-  if (!fields.year_level) { box.innerHTML = `<div class="alert alert-error">Year level is required.</div>`; return; }
+  if (!fields.year_levels) { box.innerHTML = `<div class="alert alert-error">Tag at least one year level this material is accessible for.</div>`; return; }
+  if (!fields.semesters) { box.innerHTML = `<div class="alert alert-error">Tag at least one semester this material is accessible for.</div>`; return; }
   if (!fields.author_name) { box.innerHTML = `<div class="alert alert-error">Author is required.</div>`; return; }
 
   const submitBtn = document.getElementById('uploadSubmitBtn');
@@ -434,12 +441,16 @@ function openEditModal(m) {
       <label>Description</label><textarea id="e_description" rows="3">${m.description || ''}</textarea>
       <div class="form-row">
         <div><label>Department</label><select id="e_department"><option value="">—</option>${depOpts}</select></div>
-        <div><label>Program</label><select id="e_program"><option value="">—</option>${progOpts}</select></div>
+        <div><label>Course</label><select id="e_program"><option value="">—</option>${progOpts}</select></div>
       </div>
       <div class="form-row">
-        <div><label>Year Level</label><select id="e_year" required>${yearLevelOptionsHtml(materialYearCode(m))}</select></div>
         <div><label>Price (₱)</label><input type="number" id="e_price" min="0" step="0.01" value="${m.price}"></div>
+        <div></div>
       </div>
+      <label>Accessible to year level(s) <span class="req">*</span></label>
+      ${tagCheckboxesHtml('e_years', YEAR_TAGS, maskToList(m.year_mask, 5))}
+      <label>Accessible during semester(s) <span class="req">*</span></label>
+      ${tagCheckboxesHtml('e_sems', SEMESTER_TAGS, maskToList(m.semester_mask, 2))}
       <div style="display:flex; gap:10px; margin-top:14px;">
         <button type="button" class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancel</button>
         <button type="submit" class="btn btn-primary" style="flex:1;">Save</button>
@@ -457,7 +468,8 @@ function openEditModal(m) {
       description: document.getElementById('e_description').value.trim(),
       department_id: document.getElementById('e_department').value,
       program_id: document.getElementById('e_program').value,
-      year_level: document.getElementById('e_year').value.trim(),
+      year_levels: checkedTags('e_years'),
+      semesters: checkedTags('e_sems'),
       price: document.getElementById('e_price').value,
     });
     if (r.success) { toast(r.message, 'success'); closeModal(); loadMaterials(); }

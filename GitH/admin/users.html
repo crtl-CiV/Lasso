@@ -70,23 +70,24 @@ async function loadUsers() {
   if (!r.success) { table.innerHTML = `<tr><td>${r.message}</td></tr>`; return; }
 
   if (currentType === 'students') {
-    table.innerHTML = `<thead><tr><th>Student ID</th><th>Name</th><th>Program</th><th>Year/Section</th><th>Active Subs</th><th>Status</th><th></th></tr></thead>
-      <tbody>${r.students.map(s => `
+    table.innerHTML = `<thead><tr><th>Student ID</th><th>Name</th><th>Course</th><th>Year/Section</th><th>Active Subs</th><th>Status</th><th></th></tr></thead>
+      <tbody>${r.students.map(s => { studentCache[s.id] = s; return `
         <tr>
-          <td>${s.student_id_number}</td>
-          <td>${s.full_name}<div class="muted">${s.university_email}</div></td>
-          <td>${s.program_name || '—'}</td>
-          <td>${s.year_level} - ${s.section}</td>
+          <td>${esc(s.student_id_number)}</td>
+          <td>${esc(s.full_name)}<div class="muted">${esc(s.university_email)}</div></td>
+          <td>${esc(s.program_name || '—')}</td>
+          <td>${esc(s.year_level)} - ${esc(s.section)}</td>
           <td>${s.active_subscriptions}</td>
           <td><span class="tag ${s.status === 'active' ? 'tag-active' : 'tag-trashed'}">${s.status}</span></td>
           <td style="white-space:nowrap;">
-            <button class="btn btn-outline btn-sm" onclick='viewSubscriptions(${s.id}, ${JSON.stringify(s.full_name).replace(/'/g, "&#39;")})'>Subscriptions</button>
+            <button class="btn btn-outline btn-sm" id="subbtn-${s.id}" onclick="toggleSubs(${s.id})">Subscriptions ▾</button>
             ${s.status === 'active'
               ? `<button class="btn btn-danger btn-sm" onclick="userAction(${s.id},'student','trash')">Trash</button>`
               : `<button class="btn btn-outline btn-sm" onclick="userAction(${s.id},'student','restore')">Restore</button>
-                 <button class="btn btn-danger btn-sm" onclick="confirmUserDelete(${s.id},'student')">Delete Permanently</button>`}
+                 <button class="btn btn-danger btn-sm" onclick="confirmUserDelete(${s.id},'student',${s.active_subscriptions})">Delete Permanently</button>`}
           </td>
-        </tr>`).join('') || '<tr><td colspan="7" class="muted">No students yet.</td></tr>'}</tbody>`;
+        </tr>
+        <tr id="subrow-${s.id}" style="display:none;"><td colspan="7" style="background:#f8fafc;"></td></tr>`; }).join('') || '<tr><td colspan="7" class="muted">No students yet.</td></tr>'}</tbody>`;
   } else {
     table.innerHTML = `<thead><tr><th>Admin ID</th><th>Name</th><th>Email</th><th>Position</th><th>Status</th><th></th></tr></thead>
       <tbody>${r.admins.map(a => `
@@ -100,7 +101,7 @@ async function loadUsers() {
             ${a.status === 'active'
               ? `<button class="btn btn-danger btn-sm" onclick="userAction(${a.id},'admin','trash')">Trash</button>`
               : `<button class="btn btn-outline btn-sm" onclick="userAction(${a.id},'admin','restore')">Restore</button>
-                 <button class="btn btn-danger btn-sm" onclick="confirmUserDelete(${a.id},'admin')">Delete Permanently</button>`}
+                 <button class="btn btn-danger btn-sm" onclick="confirmUserDelete(${a.id},'admin',0)">Delete Permanently</button>`}
           </td>
         </tr>`).join('') || '<tr><td colspan="6" class="muted">No administrators yet.</td></tr>'}</tbody>`;
   }
@@ -147,37 +148,78 @@ async function decideRequest(id, action) {
   else toast(r.message, 'error');
 }
 
-/* ---------- Student subscriptions ---------- */
-async function viewSubscriptions(studentId, name) {
-  const r = await apiGet(`/admin/subscription_status.php?student_id=${studentId}`);
-  const rows = r.success ? r.subscriptions : [];
-  document.getElementById('modalContent').innerHTML = `
-    <h2>${name} — Subscriptions</h2>
-    <div style="overflow-x:auto;">
-    <table>
-      <thead><tr><th>Material</th><th>Subscribed</th><th>Expires</th><th>Time left</th><th>Terms</th><th>Status</th></tr></thead>
-      <tbody>${rows.length ? rows.map(s => `
-        <tr>
-          <td>${s.title}<div class="muted">${s.material_code}</div></td>
-          <td>${s.start_date}</td>
-          <td>${s.expiry_date}</td>
-          <td>${durationText(s.expiry_date)}</td>
-          <td>${s.semester_count}</td>
-          <td><span class="tag ${subIsActive(s) ? 'tag-active' : 'tag-expired'}">${subIsActive(s) ? 'active' : 'expired'}</span></td>
-        </tr>`).join('') : '<tr><td colspan="6" class="muted">This student has no subscriptions yet.</td></tr>'}</tbody>
-    </table></div>
-    <button class="btn btn-outline btn-block" style="margin-top:14px;" onclick="closeModal()">Close</button>`;
-  document.getElementById('modalBackdrop').style.display = 'flex';
-}
+/* ---------- Student subscriptions (expandable row) ---------- */
+const studentCache = {};
+const subsData = {};
 
-function confirmUserDelete(id, type) {
-  if (confirm('This will permanently delete this account and its files. This cannot be undone. Continue?')) {
-    userAction(id, type, 'delete');
+async function toggleSubs(id) {
+  const row = document.getElementById('subrow-' + id);
+  const btn = document.getElementById('subbtn-' + id);
+  if (row.style.display !== 'none') { row.style.display = 'none'; btn.textContent = 'Subscriptions ▾'; return; }
+  row.style.display = 'table-row';
+  btn.textContent = 'Hide ▴';
+  if (!row.dataset.loaded) {
+    row.firstElementChild.innerHTML = '<div class="muted">Loading…</div>';
+    const r = await apiGet(`/admin/subscription_status.php?student_id=${id}`);
+    subsData[id] = r.success ? r.subscriptions : [];
+    row.dataset.loaded = '1';
+    renderSubs(id, 'all');
   }
 }
 
-async function userAction(id, type, action) {
-  const r = await apiPost('/admin/users_action.php', { id, type, action });
+function renderSubs(id, filter) {
+  const s = studentCache[id];
+  const all = subsData[id] || [];
+  const active = all.filter(subIsActive);
+  const shown = filter === 'active' ? active : filter === 'expired' ? all.filter(x => !subIsActive(x)) : all;
+  const info = (label, value) => `<div><div class="muted" style="font-size:.72rem; text-transform:uppercase;">${label}</div><div style="font-weight:600;">${value || '—'}</div></div>`;
+
+  document.getElementById('subrow-' + id).firstElementChild.innerHTML = `
+    <div style="padding:6px 4px;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:14px;">
+        ${info('Student ID', esc(s.student_id_number))}
+        ${info('Email', esc(s.university_email))}
+        ${info('Department', esc(s.department_name))}
+        ${info('Course', esc(s.program_name))}
+        ${info('Year / Section', esc(s.year_level) + ' - ' + esc(s.section))}
+        ${info('Registered', s.created_at ? new Date(s.created_at).toLocaleDateString() : '')}
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+        <b>Subscriptions — ${active.length} active, ${all.length - active.length} expired</b>
+        <select onchange="renderSubs(${id}, this.value)" style="width:auto;">
+          <option value="all" ${filter === 'all' ? 'selected' : ''}>Show all</option>
+          <option value="active" ${filter === 'active' ? 'selected' : ''}>Active only</option>
+          <option value="expired" ${filter === 'expired' ? 'selected' : ''}>Expired only</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto;">
+      <table style="min-width:760px;">
+        <thead><tr><th>Material</th><th>Accessible for</th><th>Subscribed</th><th>Expires</th><th>Time left</th><th>Terms</th><th>Total paid</th><th>Billing / OR</th><th>Status</th></tr></thead>
+        <tbody>${shown.length ? shown.map(x => `
+          <tr>
+            <td>${esc(x.title)}<div class="muted">${esc(x.material_code)} • ${esc(x.author_name || '—')}</div></td>
+            <td><span class="tag tag-year">${yearMaskLabel(x.year_mask)}</span> <span class="tag tag-sem">${semesterMaskLabel(x.semester_mask)}</span></td>
+            <td>${esc(x.start_date)}</td>
+            <td>${esc(x.expiry_date)}</td>
+            <td>${durationText(x.expiry_date)}</td>
+            <td>${x.semester_count}</td>
+            <td>${peso(x.total_paid)}</td>
+            <td>${esc(x.billing_code || '—')}<div class="muted">${x.receipt_number ? 'OR ' + esc(x.receipt_number) : ''}</div></td>
+            <td><span class="tag ${subIsActive(x) ? 'tag-active' : 'tag-expired'}">${subIsActive(x) ? 'active' : 'expired'}</span></td>
+          </tr>`).join('') : '<tr><td colspan="9" class="muted">No subscriptions to show.</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+
+function confirmUserDelete(id, type, activeSubs) {
+  const warn = type === 'student' && activeSubs > 0
+    ? `WARNING: this student still has ${activeSubs} active subscription(s).\n\nDeleting the account permanently removes it together with their subscriptions, reading progress, billing records and uploaded photos. This cannot be undone.\n\nDelete it anyway?`
+    : 'This will permanently delete this account and its files. This cannot be undone.\n\nDelete it?';
+  if (confirm(warn)) userAction(id, type, 'delete', { force: true });
+}
+
+async function userAction(id, type, action, extra) {
+  const r = await apiPost('/admin/users_action.php', Object.assign({ id, type, action }, extra || {}));
   if (r.success) { toast(r.message, 'success'); loadUsers(); }
   else toast(r.message, 'error');
 }

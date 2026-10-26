@@ -166,3 +166,27 @@ th { color: var(--muted); font-weight:700; font-size:.78rem; text-transform:uppe
   .tabs { flex-wrap: wrap; }
   .tabs button { padding: 8px 10px; font-size: .85rem; }
 }
+
+
+/* ---- tag chips + multi-select checkboxes ---- */
+.req { color: #dc2626; font-weight: 800; }
+.check-group { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px; }
+.check-pill { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #cbd5e1; border-radius: 999px;
+  font-size: .85rem; font-weight: 600; cursor: pointer; background: #fff; margin: 0; }
+.check-pill input { width: auto; margin: 0; }
+.check-pill:has(input:checked) { background: #e8eefc; border-color: var(--navy); color: var(--navy); }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.tag-year { background: #e0f2fe; color: #075985; }
+.tag-sem { background: #fef3c7; color: #92400e; }
+
+/* ---- sales report: filters stacked on the left, report on the right ---- */
+.report-layout { display: grid; grid-template-columns: 270px 1fr; gap: 18px; align-items: start; }
+.filter-panel { position: sticky; top: 76px; }
+.filter-panel h3 { margin: 14px 0 6px; font-size: .78rem; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+.filter-panel h3:first-child { margin-top: 0; }
+.filter-panel select, .filter-panel input { width: 100%; margin-bottom: 8px; }
+.filter-panel .btn { width: 100%; margin-top: 6px; }
+@media (max-width: 860px) {
+  .report-layout { grid-template-columns: 1fr; }
+  .filter-panel { position: static; }
+}

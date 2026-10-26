@@ -17,12 +17,16 @@ $params = [];
 foreach (['title','description','price'] as $f) {
     if (isset($in[$f])) { $fields[] = "$f = ?"; $params[] = $in[$f]; }
 }
-if (isset($in['year_level'])) {
-    $yr = parseYearRange((string)$in['year_level']);
-    if (!$yr) respond(false, 'Please choose a valid year level.', 422);
-    $fields[] = "year_level = ?"; $params[] = yearRangeLabel($yr[0], $yr[1]);
-    $fields[] = "year_min = ?";   $params[] = $yr[0];
-    $fields[] = "year_max = ?";   $params[] = $yr[1];
+if (isset($in['year_levels'])) {
+    $ym = tagMask($in['year_levels'], 5);
+    if (!$ym) respond(false, 'Please tag at least one year level.', 422);
+    $fields[] = "year_mask = ?";  $params[] = $ym;
+    $fields[] = "year_level = ?"; $params[] = yearMaskLabel($ym);
+}
+if (isset($in['semesters'])) {
+    $sm = tagMask($in['semesters'], 2);
+    if (!$sm) respond(false, 'Please tag at least one semester.', 422);
+    $fields[] = "semester_mask = ?"; $params[] = $sm;
 }
 if (isset($in['department_id'])) { $fields[] = "department_id = ?"; $params[] = (int)$in['department_id'] ?: null; }
 if (isset($in['program_id'])) { $fields[] = "program_id = ?"; $params[] = (int)$in['program_id'] ?: null; }

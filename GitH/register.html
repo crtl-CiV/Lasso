@@ -28,7 +28,7 @@
           <select id="department_id" required></select>
         </div>
         <div>
-          <label>College Program</label>
+          <label>Course</label>
           <select id="program_id" required></select>
         </div>
       </div>
@@ -82,7 +82,7 @@ function renderPrograms() {
   const depId = document.getElementById('department_id').value;
   const prog = document.getElementById('program_id');
   const filtered = programs.filter(p => String(p.department_id) === String(depId));
-  prog.innerHTML = '<option value="">Select program</option>' +
+  prog.innerHTML = (filtered.length ? '<option value="">Select course</option>' : '<option value="">No courses set up for this department yet</option>') +
     filtered.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
 }
 

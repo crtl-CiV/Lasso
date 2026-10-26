@@ -33,6 +33,11 @@ async function apiUpload(path, formData) {
   return res.json();
 }
 
+/** Escapes text before it is placed into HTML. */
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 function peso(n) {
   return '\u20B1' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -66,21 +71,32 @@ async function requireAuth(role) {
   return r.user;
 }
 
-// ---------- Year levels (single years first, then the allowed ranges) ----------
-const YEAR_LEVEL_OPTIONS = [
-  ['1', '1st Year'], ['2', '2nd Year'], ['3', '3rd Year'], ['4', '4th Year'], ['5', '5th Year'],
-  ['1-2', '1st - 2nd Year'], ['1-3', '1st - 3rd Year'], ['1-4', '1st - 4th Year'], ['1-5', '1st - 5th Year'],
-  ['2-3', '2nd - 3rd Year'], ['2-4', '2nd - 4th Year'], ['2-5', '2nd - 5th Year'],
-  ['3-4', '3rd - 4th Year'], ['3-5', '3rd - 5th Year'], ['4-5', '4th - 5th Year'],
-];
-/** <option> list for a year-level <select>. `selected` is a code like '2' or '1-3'. */
-function yearLevelOptionsHtml(selected, blankLabel) {
-  const blank = blankLabel !== undefined ? `<option value="">${blankLabel}</option>` : '';
-  return blank + YEAR_LEVEL_OPTIONS.map(([v, l]) => `<option value="${v}" ${v === String(selected) ? 'selected' : ''}>${l}</option>`).join('');
+// ---------- Year level / semester tags (materials are tagged, students are matched against them) ----------
+const YEAR_TAGS = [[1, '1st Year'], [2, '2nd Year'], [3, '3rd Year'], [4, '4th Year'], [5, '5th Year']];
+const SEMESTER_TAGS = [[1, '1st Semester'], [2, '2nd Semester']];
+
+/** A row of checkboxes (multi-select). `checked` is an array of numbers. */
+function tagCheckboxesHtml(name, tags, checked) {
+  const on = (checked || []).map(Number);
+  return `<div class="check-group">` + tags.map(([v, l]) =>
+    `<label class="check-pill"><input type="checkbox" name="${name}" value="${v}" ${on.includes(v) ? 'checked' : ''}> ${l}</label>`).join('') + `</div>`;
 }
-/** Code ('2' or '1-3') for a material row that carries year_min / year_max. */
-function materialYearCode(m) {
-  return m.year_min === m.year_max ? String(m.year_min) : `${m.year_min}-${m.year_max}`;
+/** Numbers ticked in the checkbox group called `name`. */
+function checkedTags(name) {
+  return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i => Number(i.value));
+}
+/** 5 -> [1,3] (bit n-1 = tag n). */
+function maskToList(mask, max) {
+  const out = []; for (let n = 1; n <= max; n++) if (mask & (1 << (n - 1))) out.push(n); return out;
+}
+function yearMaskLabel(mask) {
+  if (mask === 31) return 'All Years';
+  const short = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th' };
+  const l = maskToList(mask, 5).map(n => short[n]);
+  return l.length ? l.join(', ') + ' Year' : '—';
+}
+function semesterMaskLabel(mask) {
+  return mask === 3 ? '1st & 2nd Semester' : mask === 1 ? '1st Semester' : mask === 2 ? '2nd Semester' : '—';
 }
 
 // ---------- Subscription duration helpers (expiry is a YYYY-MM-DD date) ----------

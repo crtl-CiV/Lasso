@@ -27,7 +27,7 @@ $mime = mime_content_type($_FILES['id_photo']['tmp_name']);
 if (!isset($allowed[$mime])) respond(false, 'The ID photo must be a JPG, PNG or WEBP image.', 422);
 
 // Stored in the PRIVATE bucket; only admins can view it through year_request_photo.php
-$objectPath = 'year-proofs/' . $user['id'] . '_' . time() . '.' . $allowed[$mime];
+$objectPath = 'year-proofs/' . $user['id'] . '_' . time() . '_' . bin2hex(random_bytes(3)) . '.' . $allowed[$mime];
 if (!uploadToStorage(STORAGE_MATERIALS_BUCKET, $objectPath, $_FILES['id_photo']['tmp_name'], $mime)) {
     respond(false, 'Could not upload your ID photo. Please try again.', 500);
 }

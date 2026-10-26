@@ -20,7 +20,7 @@
 
 <div class="page container">
   <h1>Store</h1>
-  <p class="muted">Browse instructional materials available for your program.</p>
+  <p class="muted">Browse instructional materials available for your year level and the current semester.</p>
 
   <div class="card" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
     <div style="flex:1; min-width:200px;">
@@ -28,8 +28,8 @@
       <input type="text" id="search" placeholder="Search by title or code...">
     </div>
     <div style="min-width:200px;">
-      <label>Program</label>
-      <select id="programFilter"><option value="0">All programs</option></select>
+      <label>Course</label>
+      <select id="programFilter"><option value="0">All courses</option></select>
     </div>
     <button class="btn btn-primary" onclick="loadStore()">Filter</button>
   </div>
@@ -57,7 +57,7 @@ async function loadPrograms() {
   const r = await apiGet('/reference_data.php');
   if (!r.success) return;
   document.getElementById('programFilter').innerHTML =
-    '<option value="0">All programs</option>' + r.programs.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    '<option value="0">All courses</option>' + r.programs.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
 }
 
 async function refreshCartBadge() {
@@ -82,7 +82,8 @@ function materialCard(m) {
       </div>
       <div class="body">
         <div class="title">${m.title}</div>
-        <div class="meta">by ${m.author_name || "Unknown"} • ${m.year_level || ''} • ${m.material_code} • ${m.program_name || 'General'}</div>
+        <div class="meta">by ${m.author_name || "Unknown"} • ${m.material_code} • ${m.program_name || 'General'}</div>
+        <div class="tags"><span class="tag tag-year">${yearMaskLabel(m.year_mask)}</span> <span class="tag tag-sem">${semesterMaskLabel(m.semester_mask)}</span></div>
         <div class="price">${peso(m.price)}</div>
       </div>
       <div class="actions">
@@ -98,7 +99,12 @@ async function loadStore() {
   const r = await apiGet(`/materials/list.php?search=${encodeURIComponent(search)}&program_id=${programId}`);
   const grid = document.getElementById('grid');
   if (!r.success) { grid.innerHTML = `<div class="empty-state">${r.message}</div>`; return; }
-  if (!r.materials.length) { grid.innerHTML = `<div class="empty-state">No materials found.</div>`; return; }
+  if (!r.materials.length) {
+    grid.innerHTML = r.current_term === 'Summer Term'
+      ? `<div class="empty-state">No semester is in session right now (Summer Term). Materials come back when the next semester starts — anything you already subscribed to stays in your Library.</div>`
+      : `<div class="empty-state">No materials found. Materials are shown only for your year level and the current semester.</div>`;
+    return;
+  }
   grid.innerHTML = r.materials.map(materialCard).join('');
 }
 
@@ -120,6 +126,7 @@ async function openMaterial(id) {
   document.getElementById('modalContent').innerHTML = `
     <h2>${m.title}</h2>
     <p class="muted">${m.material_code} • ${m.department_name || ''} ${m.program_name ? '• ' + m.program_name : ''}</p>
+    <div class="tags"><span class="tag tag-year">${yearMaskLabel(m.year_mask)}</span> <span class="tag tag-sem">${semesterMaskLabel(m.semester_mask)}</span></div>
     <p>${m.description || ''}</p>
     <p><b>${peso(m.price)}</b> &middot; ${m.body_page_count} body pages</p>
     ${m.is_subscribed

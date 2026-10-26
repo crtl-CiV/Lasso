@@ -19,13 +19,9 @@ $stmt = $db->prepare("SELECT status FROM subscriptions WHERE student_id = ? AND 
 $stmt->execute([$user['id'], $id]);
 $subscribed = (bool)$stmt->fetch();
 
-// Year-level exclusivity: students see their own year and anything set below it.
-// Materials they already subscribed to (even if expired) stay reachable.
-$stmt = $db->prepare("SELECT 1 FROM subscriptions WHERE student_id = ? AND material_id = ?");
-$stmt->execute([$user['id'], $id]);
-$everSubscribed = (bool)$stmt->fetch();
-if (!$everSubscribed && (int)$m['year_min'] > studentYearInt($db, (int)$user['id'])) {
-    respond(false, 'This material is not available for your year level.', 403);
+// Year + semester exclusivity. Students who currently hold an active subscription keep access to it.
+if (!$subscribed && !materialOpenTo($m, eligibilityBits($db, (int)$user['id']))) {
+    respond(false, 'This material is not available for your year level or the current semester.', 403);
 }
 
 $nonBody = json_decode($m['non_body_pages'] ?? '[]', true) ?: [];
