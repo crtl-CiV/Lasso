@@ -17,6 +17,9 @@ $params = [];
 foreach (['title','description','price'] as $f) {
     if (isset($in[$f])) { $fields[] = "$f = ?"; $params[] = $in[$f]; }
 }
+if (array_key_exists('subject_code', $in)) {
+    $fields[] = "subject_code = ?"; $params[] = substr(trim((string)$in['subject_code']), 0, 30) ?: null;
+}
 if (isset($in['year_levels'])) {
     $ym = tagMask($in['year_levels'], 5);
     if (!$ym) respond(false, 'Please tag at least one year level.', 422);

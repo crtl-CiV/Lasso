@@ -8,38 +8,39 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
-<div class="topbar">
-  <div class="brand">LASSO Admin<span class="dot">.</span></div>
-  <nav>
-    <a href="/admin/dashboard.html">Dashboard</a>
-    <a href="/admin/materials.html" class="active">Materials</a>
-    <a href="/admin/users.html">Users</a>
-    <a href="/admin/sales.html">Sales</a>
-    <button onclick="logout('/index.html')">Logout</button>
-  </nav>
-</div>
+<div class="admin" id="adminRoot">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="scrim" onclick="toggleAdminNav()"></div>
+  <div class="admin-main">
+    <div class="admin-top" id="adminTop"></div>
 
-<div class="page container">
-  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-    <h1>Manage Instructional Materials</h1>
-    <button class="btn btn-gold" onclick="openUploadModal()">+ Upload Material</button>
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Materials</h1>
+        <p class="page-sub">Upload, publish and manage instructional materials.</p>
+      </div>
+      <button class="btn btn-primary" onclick="openUploadModal()"><span id="uploadIcon"></span> Upload material</button>
+    </div>
+
+    <div class="toolbar">
+      <div class="tabs" id="statusTabs">
+        <button class="active" onclick="switchTab('all', this)">All<span class="count" id="cntAll"></span></button>
+        <button onclick="switchTab('published', this)">Published<span class="count" id="cntPublished"></span></button>
+        <button onclick="switchTab('draft', this)">Drafts<span class="count" id="cntDraft"></span></button>
+        <button onclick="switchTab('trashed', this)">Trash<span class="count" id="cntTrashed"></span></button>
+      </div>
+      <div class="search" style="margin-left:auto; max-width:340px;">
+        <span id="searchIcon"></span>
+        <input type="text" id="search" placeholder="Search title, author or code…" aria-label="Search materials">
+      </div>
+    </div>
+
+    <div class="grid cols-3" id="grid"></div>
   </div>
-
-  <div class="tabs">
-    <button class="active" data-status="all" onclick="switchTab('all', this)">All</button>
-    <button data-status="published" onclick="switchTab('published', this)">Published</button>
-    <button data-status="draft" onclick="switchTab('draft', this)">Drafts</button>
-    <button data-status="trashed" onclick="switchTab('trashed', this)">Trash / Archive</button>
-  </div>
-
-  <div id="grid" class="grid grid-3"></div>
-</div>
-
-<div id="modalBackdrop" class="modal-backdrop" style="display:none;">
-  <div class="modal" id="modalContent" style="max-width:560px;"></div>
 </div>
 
 <script src="/assets/js/api.js"></script>
+<script src="/assets/js/ui.js"></script>
 <script>
 if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -48,8 +49,14 @@ if (window.pdfjsLib) {
 let refs = { departments: [], programs: [] };
 let currentStatus = 'all';
 
+let allMaterials = [];
+
 async function init() {
-  await requireAuth('admin');
+  const user = await requireAuth('admin');
+  renderAdminShell('materials', user);
+  document.getElementById('uploadIcon').innerHTML = icon('plus', 18);
+  document.getElementById('searchIcon').innerHTML = icon('search', 18);
+  document.getElementById('search').addEventListener('input', renderMaterials);
   const r = await apiGet('/reference_data.php');
   if (r.success) refs = r;
   await loadMaterials();
@@ -57,49 +64,61 @@ async function init() {
 
 function switchTab(status, btn) {
   currentStatus = status;
-  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#statusTabs button').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  loadMaterials();
+  renderMaterials();
 }
 
 function materialAdminCard(m) {
-  const cover = m.cover_image ? `<img src="${SUPABASE_PUBLIC_URL}${m.cover_image}" alt="">` : m.title;
-  const tagClass = { draft: 'tag-draft', published: 'tag-published', trashed: 'tag-trashed' }[m.status];
-  let actions = '';
+  const cover = m.cover_image ? `<img src="${SUPABASE_PUBLIC_URL}${esc(m.cover_image)}" alt="" loading="lazy">` : esc(m.title);
+  const statusBadge = { draft: badge('neutral', 'Draft'), published: badge('success', 'Published'), trashed: badge('danger', 'Trashed') }[m.status];
+  let actions = `<button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(m).replace(/'/g, "&#39;")})'>Edit</button>
+    <button class="btn btn-outline btn-sm" onclick='openAddPagesModal(${m.id}, ${JSON.stringify(m.title).replace(/'/g, "&#39;")})'>Add pages</button>`;
   if (m.status === 'draft') actions += `<button class="btn btn-primary btn-sm" onclick="doAction(${m.id},'publish')">Publish</button>`;
   if (m.status === 'published') {
     actions += m.is_promoted
-      ? `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'unpromote')">Unpromote</button>`
-      : `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'promote')">Promote</button>`;
+      ? `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'unpromote')">Unfeature</button>`
+      : `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'promote')">${icon('star', 14)} Feature</button>`;
   }
   if (m.status === 'trashed') {
-    actions += `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'restore')">Restore</button>`;
-    actions += `<button class="btn btn-danger btn-sm" onclick="confirmDelete(${m.id}, ${m.subscriber_count || 0})">Delete Permanently</button>`;
-  } else actions += `<button class="btn btn-danger btn-sm" onclick="doAction(${m.id},'trash')">Trash</button>`;
+    actions += `<button class="btn btn-outline btn-sm" onclick="doAction(${m.id},'restore')">Restore</button>
+      <button class="btn btn-danger btn-sm" onclick="confirmDelete(${m.id}, ${m.subscriber_count || 0})">Delete permanently</button>`;
+  } else actions += `<button class="btn btn-danger btn-sm" onclick="doAction(${m.id},'trash')">${icon('trash', 14)} Trash</button>`;
 
   return `
     <div class="mcard">
-      <div class="cover">${m.is_promoted ? '<span class="promoted-tag">Featured</span>' : ''}${cover}</div>
-      <div class="body">
-        <div class="title">${m.title}</div>
-        <div class="meta">by ${m.author_name || '—'} • ${m.material_code} • ${m.total_pages || 0} page(s) • ${m.subscriber_count} subscribers</div>
-        <div class="tags"><span class="tag tag-year">${yearMaskLabel(m.year_mask)}</span> <span class="tag tag-sem">${semesterMaskLabel(m.semester_mask)}</span></div>
-        <span class="tag ${tagClass}">${m.status}</span>
-        <div class="price">${peso(m.price)}</div>
-      </div>
-      <div class="actions" style="flex-wrap:wrap;">
-        <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(m).replace(/'/g, "&#39;")})'>Edit</button>
-        <button class="btn btn-outline btn-sm" onclick="openAddPagesModal(${m.id}, '${m.title.replace(/'/g, "\\'")}')">Add Pages</button>
-        ${actions}
+      <div class="mcard-cover">${m.is_promoted ? badge('warning', 'Featured') : ''}${cover}</div>
+      <div class="mcard-body">
+        <div class="mcard-title">${esc(m.title)}</div>
+        <div class="mcard-meta">${esc(m.author_name || '—')} · ${esc(m.subject_code || m.material_code)}</div>
+        <div class="tags"><span class="badge badge-info">${esc(yearMaskLabel(m.year_mask))}</span><span class="badge badge-warning">${esc(semesterMaskLabel(m.semester_mask))}</span>${statusBadge}</div>
+        <div class="mcard-meta">${m.total_pages || 0} page(s) · ${m.subscriber_count} active subscriber(s)</div>
+        <div class="mcard-foot"><span class="price">${peso(m.price)}</span></div>
+        <div class="mcard-actions">${actions}</div>
       </div>
     </div>`;
 }
 
 async function loadMaterials() {
-  const r = await apiGet(`/admin/materials_list.php?status=${currentStatus}`);
+  const r = await apiGet('/admin/materials_list.php?status=all');
   const grid = document.getElementById('grid');
-  if (!r.success) { grid.innerHTML = `<p>${r.message}</p>`; return; }
-  grid.innerHTML = r.materials.length ? r.materials.map(materialAdminCard).join('') : '<div class="empty-state">No materials here.</div>';
+  if (!r.success) { grid.innerHTML = `<div class="empty-state">${esc(r.message)}</div>`; return; }
+  allMaterials = r.materials;
+  renderMaterials();
+}
+
+function renderMaterials() {
+  const live = allMaterials.filter(m => m.status !== 'trashed');
+  const count = (st) => allMaterials.filter(m => m.status === st).length;
+  document.getElementById('cntAll').textContent = ` ${live.length}`;
+  document.getElementById('cntPublished').textContent = ` ${count('published')}`;
+  document.getElementById('cntDraft').textContent = ` ${count('draft')}`;
+  document.getElementById('cntTrashed').textContent = ` ${count('trashed')}`;
+
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  let list = currentStatus === 'all' ? live : allMaterials.filter(m => m.status === currentStatus);
+  if (q) list = list.filter(m => [m.title, m.author_name, m.material_code, m.subject_code].some(v => String(v || '').toLowerCase().includes(q)));
+  document.getElementById('grid').innerHTML = list.length ? list.map(materialAdminCard).join('') : '<div class="empty-state">No materials here.</div>';
 }
 
 function confirmDelete(id, activeSubs) {
@@ -116,8 +135,8 @@ async function doAction(id, action, extra) {
 }
 
 function deptProgramOptions(selectedDept, selectedProg) {
-  const depOpts = refs.departments.map(d => `<option value="${d.id}" ${d.id==selectedDept?'selected':''}>${d.name}</option>`).join('');
-  const progOpts = refs.programs.map(p => `<option value="${p.id}" ${p.id==selectedProg?'selected':''}>${p.name}</option>`).join('');
+  const depOpts = refs.departments.map(d => `<option value="${d.id}" ${d.id==selectedDept?'selected':''}>${esc(d.name)}</option>`).join('');
+  const progOpts = refs.programs.map(p => `<option value="${p.id}" ${p.id==selectedProg?'selected':''}>${esc(p.name)}</option>`).join('');
   return { depOpts, progOpts };
 }
 
@@ -127,15 +146,18 @@ function deptProgramOptions(selectedDept, selectedProg) {
 // ---------------------------------------------------------
 function openUploadModal() {
   const { depOpts, progOpts } = deptProgramOptions();
-  document.getElementById('modalContent').innerHTML = `
-    <h2>Upload Instructional Material</h2>
-    <div class="tabs" style="margin-bottom:10px;">
-      <button type="button" class="active" id="tabPdf" onclick="switchUploadMode('pdf')">Upload PDF Document</button>
-      <button type="button" id="tabImages" onclick="switchUploadMode('images')">Upload Page Images</button>
+  openModal(`
+    ${modalHead('Upload instructional material', 'Fill in the details, tag who may access it, then add the file.')}
+    <div class="tabs" style="margin-bottom:14px;">
+      <button type="button" class="active" id="tabPdf" onclick="switchUploadMode('pdf')">PDF document</button>
+      <button type="button" id="tabImages" onclick="switchUploadMode('images')">Page images</button>
     </div>
     <form id="uploadForm">
       <label>Title</label><input type="text" id="u_title" required>
-      <label>Author</label><input type="text" id="u_author" required placeholder="e.g. Juan Dela Cruz">
+      <div class="form-row">
+        <div><label>Author</label><input type="text" id="u_author" required placeholder="e.g. Prof. A. Santos"></div>
+        <div><label>Subject code <span class="muted">(optional)</span></label><input type="text" id="u_subject" maxlength="30" placeholder="e.g. IT 108"></div>
+      </div>
       <label>Description</label><textarea id="u_description" rows="3"></textarea>
       <div class="form-row">
         <div><label>Department</label><select id="u_department"><option value="">—</option>${depOpts}</select></div>
@@ -147,38 +169,38 @@ function openUploadModal() {
       </div>
       <label>Accessible to year level(s) <span class="req">*</span> <span class="muted">(tick every year that may see this material)</span></label>
       ${tagCheckboxesHtml('u_years', YEAR_TAGS, [])}
-      <label>Accessible during semester(s) <span class="req">*</span> <span class="muted">(the material is hidden from students outside these)</span></label>
+      <label>Accessible during semester(s) <span class="req">*</span> <span class="muted">(hidden from students outside these)</span></label>
       ${tagCheckboxesHtml('u_sems', SEMESTER_TAGS, [])}
-      <label>Cover Image <span class="muted">(optional — first PDF page is used if left blank)</span></label>
-      <input type="file" id="u_cover" accept="image/*">
+
+      <label>Cover image <span class="muted">(optional — the first PDF page is used if left blank)</span></label>
+      <label class="dropzone" style="margin-top:0;">${icon('image', 22)}<span class="dz-title">Choose a cover image</span><span class="small">PNG or JPG</span><input type="file" id="u_cover" accept="image/*"></label>
 
       <div id="pdfModeFields">
-        <label>PDF Document</label>
-        <input type="file" id="u_pdf" accept="application/pdf">
+        <label>PDF document</label>
+        <label class="dropzone" style="margin-top:0;">${icon('upload', 22)}<span class="dz-title">Choose a PDF</span><span class="small">Pages are split in your browser</span><input type="file" id="u_pdf" accept="application/pdf"></label>
         <p class="muted" id="pdfInfo"></p>
       </div>
       <div id="imagesModeFields" style="display:none;">
-        <label>Page Images (select in reading order, page 1 first)</label>
-        <input type="file" id="u_pages" accept="image/*" multiple>
+        <label>Page images <span class="muted">(select in reading order, page 1 first)</span></label>
+        <label class="dropzone" style="margin-top:0;">${icon('upload', 22)}<span class="dz-title">Choose page images</span><span class="small">You can select many at once</span><input type="file" id="u_pages" accept="image/*" multiple></label>
       </div>
 
-      <label>Non-body pages (comma-separated page numbers — cover, TOC, glossary, etc.)</label>
+      <label>Non-body pages <span class="muted">(comma-separated page numbers — cover, TOC, glossary…)</span></label>
       <input type="text" id="u_nonbody" placeholder="e.g. 1,2,3">
-      <label>Pages excluded from the 5-page preview (comma-separated)</label>
+      <label>Pages excluded from the 5-page preview <span class="muted">(comma-separated)</span></label>
       <input type="text" id="u_excluded" placeholder="e.g. 40,41">
 
-      <div id="uploadProgress" style="display:none; margin-top:10px;">
-        <div class="progress-bar"><div id="uploadProgressBar" style="width:0%;"></div></div>
+      <div id="uploadProgress" style="display:none; margin-top:14px;">
+        <div class="progress"><span id="uploadProgressBar" style="width:0%;"></span></div>
         <p class="muted" id="uploadProgressText" style="margin-top:6px;"></p>
       </div>
       <div id="uploadAlert"></div>
-      <div style="display:flex; gap:10px; margin-top:14px;">
+      <div style="display:flex; gap:10px; margin-top:18px;">
         <button type="button" class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="btn btn-gold" style="flex:1;" id="uploadSubmitBtn">Upload</button>
+        <button type="submit" class="btn btn-primary" style="flex:1;" id="uploadSubmitBtn">Upload</button>
       </div>
-    </form>
-  `;
-  document.getElementById('modalBackdrop').style.display = 'flex';
+    </form>`, { wide: 680 });
+  bindDropzones(document.getElementById('modalContent'));
 
   document.getElementById('u_pdf').addEventListener('change', async (e) => {
     const f = e.target.files[0];
@@ -209,6 +231,7 @@ function commonFields() {
   return {
     title: document.getElementById('u_title').value.trim(),
     author_name: document.getElementById('u_author').value.trim(),
+    subject_code: document.getElementById('u_subject').value.trim(),
     description: document.getElementById('u_description').value.trim(),
     department_id: document.getElementById('u_department').value,
     program_id: document.getElementById('u_program').value,
@@ -338,31 +361,30 @@ async function handleUploadSubmit(e) {
 // Add Pages to an existing material (append more from a PDF or images)
 // ---------------------------------------------------------
 function openAddPagesModal(materialId, title) {
-  document.getElementById('modalContent').innerHTML = `
-    <h2>Add Pages — ${title}</h2>
-    <div class="tabs" style="margin-bottom:10px;">
+  openModal(`
+    ${modalHead('Add pages', esc(title))}
+    <div class="tabs" style="margin-bottom:14px;">
       <button type="button" class="active" id="apTabPdf" onclick="switchAddPagesMode('pdf')">From PDF</button>
-      <button type="button" id="apTabImages" onclick="switchAddPagesMode('images')">From Images</button>
+      <button type="button" id="apTabImages" onclick="switchAddPagesMode('images')">From images</button>
     </div>
     <div id="apPdfFields">
-      <label>PDF Document</label>
-      <input type="file" id="ap_pdf" accept="application/pdf">
+      <label>PDF document</label>
+      <label class="dropzone" style="margin-top:0;">${icon('upload', 22)}<span class="dz-title">Choose a PDF</span><input type="file" id="ap_pdf" accept="application/pdf"></label>
     </div>
     <div id="apImagesFields" style="display:none;">
-      <label>Page Images (in order)</label>
-      <input type="file" id="ap_pages" accept="image/*" multiple>
+      <label>Page images <span class="muted">(in order)</span></label>
+      <label class="dropzone" style="margin-top:0;">${icon('upload', 22)}<span class="dz-title">Choose page images</span><input type="file" id="ap_pages" accept="image/*" multiple></label>
     </div>
-    <div id="apProgress" style="display:none; margin-top:10px;">
-      <div class="progress-bar"><div id="apProgressBar" style="width:0%;"></div></div>
+    <div id="apProgress" style="display:none; margin-top:14px;">
+      <div class="progress"><span id="apProgressBar" style="width:0%;"></span></div>
       <p class="muted" id="apProgressText" style="margin-top:6px;"></p>
     </div>
     <div id="apAlert"></div>
-    <div style="display:flex; gap:10px; margin-top:14px;">
+    <div style="display:flex; gap:10px; margin-top:18px;">
       <button type="button" class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancel</button>
-      <button type="button" class="btn btn-gold" style="flex:1;" onclick="submitAddPages(${materialId})">Add Pages</button>
-    </div>
-  `;
-  document.getElementById('modalBackdrop').style.display = 'flex';
+      <button type="button" class="btn btn-primary" style="flex:1;" onclick="submitAddPages(${materialId})">Add pages</button>
+    </div>`);
+  bindDropzones(document.getElementById('modalContent'));
   document.getElementById('modalContent').dataset.mode = 'pdf';
 }
 
@@ -433,12 +455,15 @@ async function submitAddPages(materialId) {
 
 function openEditModal(m) {
   const { depOpts, progOpts } = deptProgramOptions(m.department_id, m.program_id);
-  document.getElementById('modalContent').innerHTML = `
-    <h2>Edit Material</h2>
+  openModal(`
+    ${modalHead('Edit material', esc(m.material_code))}
     <form id="editForm">
-      <label>Title</label><input type="text" id="e_title" value="${m.title.replace(/"/g,'&quot;')}" required>
-      <label>Author</label><input type="text" id="e_author" value="${(m.author_name || '').replace(/"/g,'&quot;')}" required>
-      <label>Description</label><textarea id="e_description" rows="3">${m.description || ''}</textarea>
+      <label>Title</label><input type="text" id="e_title" value="${esc(m.title)}" required>
+      <div class="form-row">
+        <div><label>Author</label><input type="text" id="e_author" value="${esc(m.author_name || '')}" required></div>
+        <div><label>Subject code <span class="muted">(optional)</span></label><input type="text" id="e_subject" maxlength="30" value="${esc(m.subject_code || '')}" placeholder="e.g. IT 108"></div>
+      </div>
+      <label>Description</label><textarea id="e_description" rows="3">${esc(m.description || '')}</textarea>
       <div class="form-row">
         <div><label>Department</label><select id="e_department"><option value="">—</option>${depOpts}</select></div>
         <div><label>Course</label><select id="e_program"><option value="">—</option>${progOpts}</select></div>
@@ -451,13 +476,11 @@ function openEditModal(m) {
       ${tagCheckboxesHtml('e_years', YEAR_TAGS, maskToList(m.year_mask, 5))}
       <label>Accessible during semester(s) <span class="req">*</span></label>
       ${tagCheckboxesHtml('e_sems', SEMESTER_TAGS, maskToList(m.semester_mask, 2))}
-      <div style="display:flex; gap:10px; margin-top:14px;">
+      <div style="display:flex; gap:10px; margin-top:18px;">
         <button type="button" class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancel</button>
         <button type="submit" class="btn btn-primary" style="flex:1;">Save</button>
       </div>
-    </form>
-  `;
-  document.getElementById('modalBackdrop').style.display = 'flex';
+    </form>`, { wide: 640 });
 
   document.getElementById('editForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -465,6 +488,7 @@ function openEditModal(m) {
       id: m.id,
       title: document.getElementById('e_title').value.trim(),
       author_name: document.getElementById('e_author').value.trim(),
+      subject_code: document.getElementById('e_subject').value.trim(),
       description: document.getElementById('e_description').value.trim(),
       department_id: document.getElementById('e_department').value,
       program_id: document.getElementById('e_program').value,
@@ -476,9 +500,6 @@ function openEditModal(m) {
     else toast(r.message, 'error');
   });
 }
-
-function closeModal() { document.getElementById('modalBackdrop').style.display = 'none'; }
-document.getElementById('modalBackdrop').addEventListener('click', (e) => { if (e.target.id === 'modalBackdrop') closeModal(); });
 
 init();
 </script>

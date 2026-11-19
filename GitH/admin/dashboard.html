@@ -7,63 +7,86 @@
 <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
-<div class="topbar">
-  <div class="brand">LASSO Admin<span class="dot">.</span></div>
-  <nav>
-    <a href="/admin/dashboard.html" class="active">Dashboard</a>
-    <a href="/admin/materials.html">Materials</a>
-    <a href="/admin/users.html">Users</a>
-    <a href="/admin/sales.html">Sales</a>
-    <button onclick="logout('/index.html')">Logout</button>
-  </nav>
-</div>
+<div class="admin" id="adminRoot">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="scrim" onclick="toggleAdminNav()"></div>
+  <div class="admin-main">
+    <div class="admin-top" id="adminTop"></div>
 
-<div class="page container">
-  <h1>Dashboard</h1>
-  <div class="grid grid-3" id="statsGrid"></div>
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-sub" id="termLine">Subscriptions, revenue and receipts at a glance.</p>
+      </div>
+      <a class="btn btn-outline" href="/admin/sales.html">Review receipts</a>
+    </div>
 
-  <div class="card">
-    <h2>Top Materials by Active Subscribers</h2>
-    <table>
-      <thead><tr><th>Material</th><th>Subscribers</th></tr></thead>
-      <tbody id="topMaterialsBody"></tbody>
-    </table>
-  </div>
+    <div class="stats" id="stats"></div>
 
-  <div class="card">
-    <h2>Top Author (by Active Subscriptions)</h2>
-    <table>
-      <thead><tr><th>Author</th><th>Active Subscriptions</th></tr></thead>
-      <tbody id="topAuthorsBody"></tbody>
-    </table>
+    <div class="two-col">
+      <div class="card flush" style="margin:0;">
+        <div class="card-head"><h2>Top materials</h2><span class="muted small">By active subscribers</span></div>
+        <div id="topMaterials"></div>
+      </div>
+      <div class="card flush" style="margin:0;">
+        <div class="card-head"><h2>Top authors</h2><span class="muted small">By active subscriptions</span></div>
+        <div id="topAuthors"></div>
+      </div>
+    </div>
+
+    <div class="card flush" style="margin-top:20px;">
+      <div class="card-head"><h2>Awaiting receipt review</h2><a href="/admin/sales.html" class="link-btn">View all</a></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Billing</th><th>Student</th><th>Amount</th><th>OR no.</th><th>Submitted</th><th></th></tr></thead>
+          <tbody id="awaitingBody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
 <script src="/assets/js/api.js"></script>
+<script src="/assets/js/ui.js"></script>
 <script>
-function statCard(label, value) {
-  return `<div class="card"><div class="muted">${label}</div><div style="font-size:1.7rem; font-weight:800; color:var(--navy);">${value}</div></div>`;
-}
-
 async function init() {
-  await requireAuth('admin');
+  const user = await requireAuth('admin');
+  renderAdminShell('dashboard', user);
   const r = await apiGet('/admin/dashboard.php');
-  if (!r.success) { toast(r.message, 'error'); return; }
-  const s = r.stats;
-  document.getElementById('statsGrid').innerHTML =
-    statCard('Active Students', s.total_students) +
-    statCard('Published Materials', s.total_materials) +
-    statCard('Active Subscriptions', s.total_active_subscriptions) +
-    statCard('Total Sales', peso(s.total_sales)) +
-    statCard('Pending Payments', s.pending_payments);
+  if (!r.success) { document.getElementById('stats').innerHTML = `<div class="alert alert-error">${esc(r.message)}</div>`; return; }
+  const k = r.kpis;
+  document.getElementById('termLine').textContent = `${r.term.semester}, AY ${r.term.academic_year} — subscriptions, revenue and receipts at a glance.`;
 
-  document.getElementById('topMaterialsBody').innerHTML = r.top_materials.length
-    ? r.top_materials.map(m => `<tr><td>${m.title}</td><td>${m.subscribers}</td></tr>`).join('')
-    : '<tr><td colspan="2" class="muted">No subscriptions yet.</td></tr>';
+  const revNote = k.revenue_change_pct === null
+    ? `<div class="stat-delta" style="color:var(--slate-500);">No sales last semester to compare</div>`
+    : `<div class="stat-delta ${k.revenue_change_pct < 0 ? 'neg' : ''}">${k.revenue_change_pct >= 0 ? '+' : ''}${k.revenue_change_pct}% vs last sem</div>`;
 
-  document.getElementById('topAuthorsBody').innerHTML = r.top_authors.length
-    ? r.top_authors.map(a => `<tr><td>${a.name}</td><td>${a.active_subscriptions}</td></tr>`).join('')
-    : '<tr><td colspan="2" class="muted">No active subscriptions yet.</td></tr>';
+  const tile = (ic, label, value, note, amber = false) => `
+    <div class="stat"><span class="stat-icon ${amber ? 'amber' : ''}">${icon(ic, 22)}</span>
+      <div class="stat-label">${label}</div><div class="stat-value">${value}</div>${note}</div>`;
+  document.getElementById('stats').innerHTML =
+    tile('users', 'Active subscribers', k.active_subscribers, `<div class="stat-delta">+${k.active_week} this week</div>`) +
+    tile('library', 'Subscriptions sold', k.subscriptions_sold, `<div class="stat-delta">+${k.sold_month} this month</div>`) +
+    tile('sales', 'Total revenue', peso(k.total_revenue), revNote) +
+    tile('receipt', 'Pending receipts', k.pending_receipts, `<div class="stat-delta warn">${k.pending_receipts ? 'Needs review' : 'All caught up'}</div>`, true);
+
+  const rank = (rows, valueKey, titleKey, subFn) => rows.length ? rows.map((x, i) => `
+    <div class="rank-row"><span class="rank-no">${i + 1}</span>
+      <div class="rank-main"><div class="t">${esc(x[titleKey])}</div>${subFn ? `<div class="muted small">${esc(subFn(x))}</div>` : ''}</div>
+      <div class="rank-value">${x[valueKey]} <span class="muted small" style="font-weight:500;">subs</span></div></div>`).join('')
+    : '<p class="muted" style="padding:20px 24px;">No active subscriptions yet.</p>';
+  document.getElementById('topMaterials').innerHTML = rank(r.top_materials, 'subscribers', 'title', x => [x.author_name, x.subject_code].filter(Boolean).join(' · '));
+  document.getElementById('topAuthors').innerHTML = rank(r.top_authors, 'active_subscriptions', 'name');
+
+  document.getElementById('awaitingBody').innerHTML = r.awaiting_review.length ? r.awaiting_review.map(b => `
+    <tr>
+      <td><b>${esc(b.billing_code)}</b></td>
+      <td><div class="person"><span class="avatar">${esc(initials(b.full_name))}</span><div class="stack"><span class="name">${esc(b.full_name)}</span><span class="muted small">${esc(b.student_id_number)}</span></div></div></td>
+      <td>${peso(b.total_amount)}</td>
+      <td>${esc(b.receipt_number || '—')}</td>
+      <td>${fmtDate(b.receipt_submitted_at)}</td>
+      <td class="text-right"><a class="btn btn-primary btn-sm" href="/admin/sales.html?review=${encodeURIComponent(b.billing_code)}">Review</a></td>
+    </tr>`).join('') : '<tr><td colspan="6" class="muted">No receipts are waiting for review.</td></tr>';
 }
 init();
 </script>

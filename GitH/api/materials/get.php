@@ -6,10 +6,11 @@ $db = getDB();
 $id = (int)($_GET['id'] ?? 0);
 if (!$id) respond(false, 'Material not specified.', 422);
 
-$stmt = $db->prepare("SELECT m.*, d.name AS department_name, p.name AS program_name
+$stmt = $db->prepare("SELECT m.*, d.name AS department_name, p.name AS program_name, au.name AS author_name
                        FROM instructional_materials m
                        LEFT JOIN college_departments d ON d.id = m.department_id
                        LEFT JOIN college_programs p ON p.id = m.program_id
+                       LEFT JOIN authors au ON au.id = m.author_id
                        WHERE m.id = ? AND m.status = 'published'");
 $stmt->execute([$id]);
 $m = $stmt->fetch();

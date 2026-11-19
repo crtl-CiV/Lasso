@@ -1,11 +1,12 @@
 <?php
 // =========================================================
-// LASSO — Sales Report.
-// One row per student+material subscription, counting the paid purchases
-// that fall inside the chosen filters (so a renewal inside the period shows
-// as 2 terms). Every filter is optional.
+// LASSO — Sales report by instructional material.
+// One row per material, counting the paid purchases that fall inside the
+// chosen filters. Every filter is optional.
 //   Semester / Academic Year / dates -> when the purchase was made
 //   Year level                       -> the year the MATERIAL is tagged for
+//   Department / Course              -> the BUYER's department / course
+// "Active" means the student's subscription is still running today.
 // =========================================================
 require_once __DIR__ . '/../config/bootstrap.php';
 requireAdmin();
@@ -21,25 +22,21 @@ $dateFrom     = trim($_GET['date_from'] ?? '');
 $dateTo       = trim($_GET['date_to'] ?? '');
 
 $purchaseDate = "COALESCE(b.confirmed_at, b.created_at)";   // older records may lack confirmed_at
+$isActive = "(sub.status = 'active' AND sub.expiry_date >= CURRENT_DATE)";
 
-$sql = "SELECT sub.id AS subscription_id,
-               s.student_id_number, s.full_name,
-               d.name AS department_name, p.name AS course_name,
-               m.title, m.material_code, m.year_mask, m.semester_mask, au.name AS author_name,
-               sub.start_date, sub.expiry_date, sub.semester_count,
-               (sub.status = 'active' AND sub.expiry_date >= CURRENT_DATE) AS is_active,
+$sql = "SELECT m.id AS material_id, m.title, m.material_code, m.subject_code, m.price, m.year_mask, m.semester_mask,
+               au.name AS author_name,
+               COUNT(DISTINCT sub.id) AS subscribers,
+               COUNT(DISTINCT sub.id) FILTER (WHERE $isActive) AS active,
                COUNT(bi.id) AS purchases,
                COALESCE(SUM(bi.price), 0) AS revenue,
-               MIN($purchaseDate) AS first_purchased,
-               string_agg(DISTINCT b.semester, ', ') AS semesters_purchased
+               COALESCE(SUM(bi.price) FILTER (WHERE $isActive), 0) AS active_revenue
         FROM billing_statement_items bi
         JOIN billing_statements b ON b.id = bi.billing_id AND b.status = 'paid'
         JOIN subscriptions sub ON sub.student_id = b.student_id AND sub.material_id = bi.material_id
         JOIN students s ON s.id = b.student_id
         JOIN instructional_materials m ON m.id = bi.material_id
         LEFT JOIN authors au ON au.id = m.author_id
-        LEFT JOIN college_departments d ON d.id = s.department_id
-        LEFT JOIN college_programs p ON p.id = s.program_id
         WHERE 1=1";
 $params = [];
 if ($materialId > 0)   { $sql .= " AND m.id = ?";            $params[] = $materialId; }
@@ -50,28 +47,29 @@ if ($semester !== '')     { $sql .= " AND b.semester = ?";      $params[] = $sem
 if ($academicYear !== '') { $sql .= " AND b.academic_year = ?"; $params[] = $academicYear; }
 if ($dateFrom !== '')     { $sql .= " AND DATE($purchaseDate) >= ?"; $params[] = $dateFrom; }
 if ($dateTo !== '')       { $sql .= " AND DATE($purchaseDate) <= ?"; $params[] = $dateTo; }
-$sql .= " GROUP BY sub.id, s.id, d.name, p.name, m.id, au.name
-          ORDER BY MIN($purchaseDate) DESC, s.full_name";
+$sql .= " GROUP BY m.id, au.name ORDER BY SUM(bi.price) DESC, m.title";
 
 $stmt = $db->prepare($sql);
 $stmt->execute($params);
 $rows = $stmt->fetchAll();
 
-$sum = ['purchases' => 0, 'revenue' => 0.0];
-$sumActive = ['purchases' => 0, 'revenue' => 0.0];
+$tot = ['subscribers' => 0, 'active' => 0, 'purchases' => 0, 'revenue' => 0.0, 'active_revenue' => 0.0];
 foreach ($rows as &$r) {
-    $r['is_active'] = (bool)$r['is_active'];
-    $r['purchases'] = (int)$r['purchases'];
-    $r['revenue'] = (float)$r['revenue'];
+    foreach (['subscribers', 'active', 'purchases'] as $k) $r[$k] = (int)$r[$k];
+    foreach (['revenue', 'active_revenue', 'price'] as $k) $r[$k] = (float)$r[$k];
+    $r['expired'] = $r['subscribers'] - $r['active'];
     $r['year_label'] = yearMaskLabel((int)$r['year_mask']);
     $r['semester_label'] = semesterMaskLabel((int)$r['semester_mask']);
-    $sum['purchases'] += $r['purchases'];       $sum['revenue'] += $r['revenue'];
-    if ($r['is_active']) { $sumActive['purchases'] += $r['purchases']; $sumActive['revenue'] += $r['revenue']; }
+    foreach (array_keys($tot) as $k) $tot[$k] += $r[$k];
+}
+unset($r);
+foreach ($rows as &$r) {
+    $r['share'] = $tot['revenue'] > 0 ? round($r['revenue'] / $tot['revenue'] * 100, 1) : 0;
+    $r['active_share'] = $tot['active_revenue'] > 0 ? round($r['active_revenue'] / $tot['active_revenue'] * 100, 1) : 0;
 }
 unset($r);
 
-// Author revenue/ranking — tied to CURRENTLY ACTIVE subscriptions only,
-// so both the count and revenue drop as subscriptions expire.
+// Author revenue/ranking — tied to CURRENTLY ACTIVE subscriptions only, so it drops as subscriptions expire.
 $authorRows = $db->query("SELECT au.name AS author_name,
                                   COUNT(*) AS active_subscriptions,
                                   COALESCE(SUM(bi.price),0) AS active_revenue
@@ -80,12 +78,16 @@ $authorRows = $db->query("SELECT au.name AS author_name,
                            JOIN authors au ON au.id = m.author_id
                            LEFT JOIN billing_statement_items bi ON bi.billing_id = sub.billing_id AND bi.material_id = sub.material_id
                            WHERE sub.status = 'active' AND sub.expiry_date >= CURRENT_DATE
-                           GROUP BY au.id ORDER BY active_subscriptions DESC")->fetchAll();
+                           GROUP BY au.id ORDER BY active_subscriptions DESC, au.name")->fetchAll();
 
 respond(true, [
     'report' => $rows,
-    'summary' => ['total_subscriptions' => $sum['purchases'], 'total_revenue' => $sum['revenue']],
-    'summary_active' => ['total_subscriptions' => $sumActive['purchases'], 'total_revenue' => $sumActive['revenue']],
+    'summary' => [
+        'materials' => count($rows),
+        'total_subscriptions' => $tot['purchases'],   // paid purchases (a renewal counts again)
+        'subscribers' => $tot['subscribers'], 'active' => $tot['active'], 'expired' => $tot['subscribers'] - $tot['active'],
+        'total_revenue' => $tot['revenue'], 'active_revenue' => $tot['active_revenue'],
+    ],
     'author_ranking' => $authorRows,
     'filters_applied' => [
         'material_id' => $materialId ?: null,

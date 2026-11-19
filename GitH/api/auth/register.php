@@ -12,6 +12,7 @@ $departmentId= (int)($_POST['department_id'] ?? 0);
 $programId   = (int)($_POST['program_id'] ?? 0);
 $yearLevel   = trim($_POST['year_level'] ?? '');
 $section     = trim($_POST['section'] ?? '');
+if (isset($_POST['password_confirm']) && (string)$_POST['password_confirm'] !== $password) respond(false, 'The two passwords do not match.', 422);
 
 if (!$studentId || !$email || !$password || !$fullName || !$departmentId || !$programId || !$yearLevel || !$section) {
     respond(false, 'Please fill out all required fields.', 422);

@@ -3,40 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LASSO — Login</title>
+<title>Log in — LASSO</title>
 <link rel="stylesheet" href="/assets/css/style.css">
 </head>
-<body>
-<div class="auth-shell">
-  <div class="auth-card">
-    <h1>LASSO</h1>
-    <p class="sub">Learning Asset Subscription and Sales Operation</p>
+<body class="auth">
+<a class="auth-logo" href="/index.html"><span class="brand-mark">L</span>LASSO</a>
+<div class="auth-wrap">
+  <div class="login-card">
+    <h1>Welcome back</h1>
+    <p class="page-sub">Log in with your university email.</p>
     <div id="alertBox"></div>
     <form id="loginForm">
-      <label>Email</label>
-      <input type="text" id="identifier" required placeholder="e.g. juan.delacruz@students.isatu.edu.ph">
-      <label>Password</label>
-      <input type="password" id="password" required placeholder="••••••••">
-      <button class="btn btn-primary btn-block" style="margin-top:18px;" type="submit">Log In</button>
+      <label for="identifier">Email</label>
+      <input type="text" id="identifier" required autocomplete="username" placeholder="e.g. juan.delacruz@students.isatu.edu.ph">
+      <label for="password">Password</label>
+      <input type="password" id="password" required autocomplete="current-password" placeholder="Your password">
+      <button class="btn btn-primary btn-block" style="margin-top:24px; padding:13px;" type="submit" id="loginBtn">Log in</button>
     </form>
-    <p class="switch-link">No account yet? <a href="/register.html" style="color:var(--navy); font-weight:700;">Register</a></p>
+    <p class="auth-foot">No account yet? <a href="/register.html"><b>Register</b></a></p>
   </div>
 </div>
 <script src="/assets/js/api.js"></script>
 <script>
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const identifier = document.getElementById('identifier').value.trim();
-  const password = document.getElementById('password').value;
-  const box = document.getElementById('alertBox');
-  box.innerHTML = '';
-  const r = await apiPost('/auth/login.php', { identifier, password });
+  const box = document.getElementById('alertBox'), btn = document.getElementById('loginBtn');
+  box.innerHTML = ''; btn.disabled = true; btn.textContent = 'Logging in…';
+  const r = await apiPost('/auth/login.php', {
+    identifier: document.getElementById('identifier').value.trim(),
+    password: document.getElementById('password').value,
+  });
   if (r.success) {
-    const role = r.user.role;
-    if (role === 'admin') window.location.href = '/admin/dashboard.html';
-    else window.location.href = '/student/store.html';
+    window.location.href = r.user.role === 'admin' ? '/admin/dashboard.html' : '/student/store.html';
   } else {
-    box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
+    btn.disabled = false; btn.textContent = 'Log in';
+    box.innerHTML = `<div class="alert alert-error">${esc(r.message)}</div>`;
   }
 });
 </script>

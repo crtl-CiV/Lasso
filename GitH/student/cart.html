@@ -7,179 +7,212 @@
 <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
-<div class="topbar">
-  <div class="brand">LASSO<span class="dot">.</span></div>
-  <nav>
-    <a href="/student/store.html">Store</a>
-    <a href="/student/cart.html" class="active">Cart<span class="badge-count" id="cartBadge" style="display:none;">0</span></a>
-    <a href="/student/library.html">Library</a>
-    <a href="/student/profile.html">Profile</a>
-    <button onclick="logout()">Logout</button>
-  </nav>
-</div>
+<header id="shell"></header>
 
-<div class="page container" style="max-width:720px;">
-  <h1>Cart</h1>
-  <p class="muted">Review your selected instructional materials, then check out to generate a billing statement.</p>
+<main class="page">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Cart</h1>
+      <p class="page-sub">Review your materials, generate a billing statement, then submit your receipt.</p>
+    </div>
+  </div>
 
   <div id="pendingBox"></div>
-  <div id="cartBox" class="card"></div>
 
-  <h1 style="margin-top:30px;">Billing History</h1>
-  <p class="muted">Reprint any billing statement you've generated before.</p>
-  <div class="card">
-    <table>
-      <thead><tr><th>Billing Code</th><th>Date</th><th>Term</th><th>Amount</th><th>Status</th><th></th></tr></thead>
-      <tbody id="historyBody"></tbody>
-    </table>
+  <div class="cart-layout">
+    <div class="card flush" id="cartCard">
+      <div class="card-head"><h2>Items</h2><span class="muted" id="itemCount"></span></div>
+      <div id="cartBox"></div>
+    </div>
+    <div class="card" id="summaryCard">
+      <h2 style="margin-bottom:12px;">Order summary</h2>
+      <div class="summary-row"><span class="muted">Items</span><span id="sumItems">0</span></div>
+      <div class="summary-row"><span class="muted">Term</span><span id="sumTerm">—</span></div>
+      <div class="summary-row"><span class="muted">Access</span><span>3 months per material</span></div>
+      <div class="summary-row total"><span>Total</span><span id="sumTotal">₱0.00</span></div>
+      <button class="btn btn-primary btn-block" style="margin-top:16px; padding:12px;" id="checkoutBtn" onclick="checkout()" disabled>Checkout</button>
+      <p class="field-hint" style="margin-top:12px;">A billing statement will be generated. Pay at the school cashier, then submit the official receipt (OR) on this page.</p>
+    </div>
   </div>
-</div>
 
-<div id="modalBackdrop" class="modal-backdrop" style="display:none;">
-  <div class="modal" id="modalContent"></div>
-</div>
+  <div class="card flush" style="margin-top:24px;">
+    <div class="card-head"><h2>Billing history</h2></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Billing</th><th>Date</th><th>Term</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+    <div style="padding:12px 24px; border-top:1px solid var(--slate-200);" id="historyMore" class="hidden">
+      <button class="link-btn" id="historyToggle"></button>
+    </div>
+  </div>
+</main>
 
 <script src="/assets/js/api.js"></script>
+<script src="/assets/js/ui.js"></script>
 <script>
+let historyCache = [], showAllHistory = false;
+const HISTORY_LIMIT = 5;
+
 async function init() {
   await requireAuth('student');
-  await refreshCartBadge();
-  await loadPending();
-  await loadCart();
-  await loadHistory();
+  renderStudentShell('cart');
+  await Promise.all([loadPending(), loadCart(), loadHistory()]);
 }
 
-async function refreshCartBadge() {
-  const r = await apiGet('/cart/list.php');
-  const badge = document.getElementById('cartBadge');
-  if (r.success && r.items.length) { badge.style.display = 'inline-block'; badge.textContent = r.items.length; }
-  else badge.style.display = 'none';
-}
-
+/* ---------- payments & receipts for billings that are not approved yet ---------- */
 async function loadPending() {
   const r = await apiGet('/subscription/status.php');
   const box = document.getElementById('pendingBox');
   if (!r.success || !r.pending_billings.length) { box.innerHTML = ''; return; }
-  box.innerHTML = r.pending_billings.map(b => `
-    <div class="card" style="border-left:4px solid var(--gold);">
-      <b>Billing #${b.billing_code}</b> — ${peso(b.total_amount)}
-      ${b.receipt_status === 'submitted'
-        ? `<p class="muted" style="margin:6px 0 0;">Receipt (OR ${b.receipt_number}) submitted — waiting for administrator review.</p>`
-        : b.receipt_status === 'rejected'
-          ? `<p style="margin:6px 0 0; color:#b91c1c;">Your receipt was rejected${b.receipt_note ? ': ' + b.receipt_note : '.'} <a href="/student/profile.html" style="color:var(--navy); font-weight:700;">Submit it again in Profile</a>.</p>`
-          : `<p class="muted" style="margin:6px 0 0;">Pay at the school cashier, then submit your official receipt (OR) in <a href="/student/profile.html" style="color:var(--navy); font-weight:700;">Profile</a> to unlock your materials.</p>`}
-    </div>`).join('');
+  box.innerHTML = `
+    <div class="card" style="border-left:4px solid var(--amber-500);">
+      <h2>Payments &amp; receipts</h2>
+      <p class="muted" style="margin:4px 0 6px;">Pay at the school cashier for each billing, then submit the official receipt (OR). An administrator will validate it and unlock your materials.</p>
+      ${r.pending_billings.map(b => {
+        let status, form = '';
+        if (b.receipt_status === 'submitted') {
+          status = `<div class="alert alert-info">Receipt (OR ${esc(b.receipt_number)}) submitted — waiting for administrator review.</div>`;
+        } else {
+          status = b.receipt_status === 'rejected'
+            ? `<div class="alert alert-error">Your receipt was rejected${b.receipt_note ? ': ' + esc(b.receipt_note) + '.' : '.'} Please submit it again.</div>`
+            : `<p class="muted" style="margin:6px 0;">Waiting for your receipt.</p>`;
+          form = `
+            <form class="rcpForm" data-code="${esc(b.billing_code)}">
+              <div class="form-row">
+                <div><label>OR number</label><input type="text" name="receipt_number" required placeholder="Number printed on your receipt"></div>
+                <div><label>Receipt photo</label>${dropzoneHtml('receipt_photo', 'Click to upload', 'Clear photo of the whole receipt')}</div>
+              </div>
+              <button class="btn btn-primary btn-sm" style="margin-top:12px;" type="submit">Submit receipt</button>
+            </form>`;
+        }
+        return `
+          <div class="rcpBlock" style="border-top:1px solid var(--slate-200); margin-top:14px; padding-top:14px;">
+            <div class="row-gap" style="justify-content:space-between;"><b>Billing #${esc(b.billing_code)}</b><b>${peso(b.total_amount)}</b></div>
+            ${status}${form}<div class="rcpMsg"></div>
+          </div>`;
+      }).join('')}
+    </div>`;
+  bindDropzones(box);
+  box.querySelectorAll('.rcpForm').forEach(f => f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(f); fd.append('billing_code', f.dataset.code);
+    const btn = f.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Submitting…';
+    const res = await fetch('/api/cart/submit_receipt.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+    const out = await res.json();
+    if (out.success) { toast(out.message, 'success'); loadPending(); loadHistory(); }
+    else {
+      btn.disabled = false; btn.textContent = 'Submit receipt';
+      f.closest('.rcpBlock').querySelector('.rcpMsg').innerHTML = `<div class="alert alert-error">${esc(out.message)}</div>`;
+    }
+  }));
 }
 
+/* ---------- cart ---------- */
 async function loadCart() {
   const r = await apiGet('/cart/list.php');
   const box = document.getElementById('cartBox');
-  if (!r.success) { box.innerHTML = `<p>${r.message}</p>`; return; }
+  if (!r.success) { box.innerHTML = `<p style="padding:24px;">${esc(r.message)}</p>`; return; }
+  document.getElementById('itemCount').textContent = r.items.length ? `${r.items.length} item${r.items.length === 1 ? '' : 's'}` : '';
+  document.getElementById('sumItems').textContent = r.items.length;
+  document.getElementById('sumTotal').textContent = peso(r.total);
+  document.getElementById('sumTerm').textContent = r.term ? `${r.term.semester}, AY ${r.term.academic_year}` : '—';
+  document.getElementById('checkoutBtn').disabled = !r.items.length;
+  refreshCartBadge();
+
   if (!r.items.length) {
-    box.innerHTML = `<div class="empty-state">
-      <p>Your cart is empty.</p>
-      <p class="muted">Add materials from the Store to get started.</p>
-      <a class="btn btn-primary" href="/student/store.html" style="margin-top:10px; display:inline-flex;">Go to Store</a>
-    </div>`;
+    box.innerHTML = `<div style="text-align:center; padding:40px 20px;">
+      <p style="font-weight:600;">Your cart is empty.</p>
+      <p class="muted" style="margin:4px 0 14px;">Add materials from the Store to get started.</p>
+      <a class="btn btn-primary" href="/student/store.html">Go to Store</a></div>`;
     return;
   }
   box.innerHTML = r.items.map(it => `
-    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #e5e7eb;">
-      <div><b>${it.title}</b><div class="muted">${it.material_code}</div></div>
-      <div style="display:flex; align-items:center; gap:12px;">
-        <span>${peso(it.price)}</span>
-        <button class="btn btn-danger btn-sm" onclick="removeItem(${it.id})">Remove</button>
+    <div class="cart-item">
+      <div class="cart-thumb">${it.cover_image ? `<img src="${SUPABASE_PUBLIC_URL}${esc(it.cover_image)}" alt="">` : ''}</div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600;">${esc(it.title)}</div>
+        <div class="mcard-meta">${esc(it.author_name || 'Unknown author')} · ${esc(it.subject_code || it.material_code)}</div>
       </div>
-    </div>`).join('') +
-    `<div style="display:flex; justify-content:space-between; padding-top:14px; font-weight:800; font-size:1.05rem;">
-      <span>Total</span><span>${peso(r.total)}</span>
-    </div>
-    <button class="btn btn-gold btn-block" style="margin-top:16px;" onclick="checkout()">Checkout</button>`;
+      <div class="price" style="font-size:16px;">${peso(it.price)}</div>
+      <button class="iconbtn" title="Remove" aria-label="Remove ${esc(it.title)}" onclick="removeItem(${it.id})">${icon('trash', 18)}</button>
+    </div>`).join('');
 }
 
 async function removeItem(id) {
   const r = await apiPost('/cart/remove.php', { material_id: id });
-  if (r.success) { toast('Removed', 'success'); refreshCartBadge(); loadCart(); }
+  if (r.success) { toast('Removed', 'success'); loadCart(); }
 }
 
 async function checkout() {
+  const btn = document.getElementById('checkoutBtn'); btn.disabled = true;
   const r = await apiPost('/cart/checkout.php', {});
+  btn.disabled = false;
   if (!r.success) { toast(r.message, 'error'); return; }
   showBillingModal(r.billing, true);
   loadHistory();
 }
 
-/** Renders the printable billing statement modal. Used both right after
- * checkout (isFresh=true, shows the payment instructions banner) and when
- * reprinting from Billing History (isFresh=false, plain reprint). */
+/** Printable billing statement. isFresh = shown right after checkout (with the payment steps). */
 function showBillingModal(b, isFresh) {
-  const rows = b.items.map(i => `<tr><td>${i.title}</td><td style="text-align:right;">${peso(i.price)}</td></tr>`).join('');
-  document.getElementById('modalContent').innerHTML = `
-    <h2>Billing Statement</h2>
-    <p class="muted">${b.billing_code} • ${b.date}</p>
-    <p><b>${b.student_name}</b> — ${b.student_id_number}</p>
-    <table><thead><tr><th>Material</th><th style="text-align:right;">Amount</th></tr></thead>
+  const rows = b.items.map(i => `<tr><td>${esc(i.title)}</td><td class="text-right">${peso(i.price)}</td></tr>`).join('');
+  openModal(`
+    ${modalHead('Billing statement', `${esc(b.billing_code)} · ${esc(b.date)}`)}
+    <p style="margin-bottom:10px;"><b>${esc(b.student_name)}</b> — ${esc(b.student_id_number)}</p>
+    <table><thead><tr><th>Material</th><th class="text-right">Amount</th></tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr><td><b>Total</b></td><td style="text-align:right;"><b>${peso(b.total)}</b></td></tr></tfoot>
-    </table>
-    <p class="muted">${b.semester}, AY ${b.academic_year}</p>
+      <tfoot><tr><td><b>Total</b></td><td class="text-right"><b>${peso(b.total)}</b></td></tr></tfoot></table>
+    <p class="muted" style="margin-top:8px;">${esc(b.semester)}, AY ${esc(b.academic_year)}</p>
     ${isFresh
-      ? `<div class="alert alert-info" style="margin-top:12px;">Print this statement and pay at the school cashier. Then submit the official receipt (OR) from your Profile page — an administrator will validate it and unlock your materials.</div>`
-      : `<div class="alert alert-info" style="margin-top:12px;">Reprinted copy of a previously generated billing statement.</div>`}
+      ? `<div class="alert alert-info">Print this statement and pay at the school cashier. Then submit the official receipt (OR) on this page — an administrator will validate it and unlock your materials.</div>`
+      : `<div class="alert alert-info">Reprinted copy of a previously generated billing statement.</div>`}
     <div style="display:flex; gap:10px; margin-top:14px;">
-      <button class="btn btn-outline" style="flex:1;" onclick="window.print()">Print</button>
-      <button class="btn btn-primary" style="flex:1;" onclick="closeModal(); loadPending(); loadCart(); refreshCartBadge();">Done</button>
-    </div>
-  `;
-  document.getElementById('modalBackdrop').style.display = 'flex';
+      <button class="btn btn-outline" style="flex:1;" onclick="window.print()">${icon('print', 16)} Print</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="closeModal(); loadPending(); loadCart();">Done</button>
+    </div>`);
 }
 
-let historyCache = [];
-
+/* ---------- billing history (newest 5, rest on demand) ---------- */
 async function loadHistory() {
   const r = await apiGet('/cart/billing_history.php');
   const body = document.getElementById('historyBody');
-  if (!r.success) { body.innerHTML = `<tr><td colspan="6" class="muted">${r.message}</td></tr>`; return; }
+  if (!r.success) { body.innerHTML = `<tr><td colspan="6" class="muted">${esc(r.message)}</td></tr>`; return; }
   historyCache = r.billings.map(b => ({ ...b, student_name: r.student_name, student_id_number: r.student_id_number }));
-
-  if (!historyCache.length) {
-    body.innerHTML = '<tr><td colspan="6" class="muted">No billing statements yet.</td></tr>';
-    return;
-  }
-
-  body.innerHTML = historyCache.map((b, idx) => {
-    const statusTag = b.status === 'paid'
-      ? '<span class="tag tag-active">Paid</span>'
-      : b.receipt_status === 'submitted' ? '<span class="tag tag-draft">Receipt under review</span>'
-      : b.receipt_status === 'rejected' ? '<span class="tag tag-trashed">Receipt rejected</span>'
-      : '<span class="tag tag-draft">Awaiting payment / receipt</span>';
-    return `
-      <tr>
-        <td>${b.billing_code}</td>
-        <td>${b.created_at}</td>
-        <td>${b.semester}, AY ${b.academic_year}</td>
-        <td>${peso(b.total_amount)}</td>
-        <td>${statusTag}</td>
-        <td><button class="btn btn-outline btn-sm" onclick="printBilling(${idx})">Print</button></td>
-      </tr>`;
-  }).join('');
+  renderHistory();
 }
+
+function renderHistory() {
+  const body = document.getElementById('historyBody');
+  const wrap = document.getElementById('historyMore');
+  if (!historyCache.length) { body.innerHTML = '<tr><td colspan="6" class="muted">No billing statements yet.</td></tr>'; wrap.classList.add('hidden'); return; }
+  const shown = showAllHistory ? historyCache : historyCache.slice(0, HISTORY_LIMIT);
+  body.innerHTML = shown.map((b) => {
+    const idx = historyCache.indexOf(b);
+    const st = b.status === 'paid' ? badge('success', 'Paid')
+      : b.receipt_status === 'submitted' ? badge('info', 'Receipt under review')
+      : b.receipt_status === 'rejected' ? badge('danger', 'Receipt rejected')
+      : badge('neutral', 'Awaiting receipt');
+    return `<tr>
+      <td><b>${esc(b.billing_code)}</b></td>
+      <td>${fmtDate(b.created_at)}</td>
+      <td>${esc(b.semester)}, AY ${esc(b.academic_year)}</td>
+      <td>${peso(b.total_amount)}</td>
+      <td>${st}</td>
+      <td class="text-right"><button class="btn btn-ghost btn-sm" onclick="printBilling(${idx})">${icon('print', 16)} Print</button></td>
+    </tr>`;
+  }).join('');
+  const more = historyCache.length - HISTORY_LIMIT;
+  wrap.classList.toggle('hidden', more <= 0);
+  document.getElementById('historyToggle').textContent = showAllHistory ? 'Show fewer' : `Show ${more} older billing${more === 1 ? '' : 's'}`;
+}
+document.getElementById('historyToggle').addEventListener('click', () => { showAllHistory = !showAllHistory; renderHistory(); });
 
 function printBilling(idx) {
   const b = historyCache[idx];
-  showBillingModal({
-    billing_code: b.billing_code,
-    student_name: b.student_name,
-    student_id_number: b.student_id_number,
-    items: b.items,
-    total: b.total_amount,
-    semester: b.semester,
-    academic_year: b.academic_year,
-    date: b.created_at,
-  }, false);
+  showBillingModal({ billing_code: b.billing_code, student_name: b.student_name, student_id_number: b.student_id_number, items: b.items,
+    total: b.total_amount, semester: b.semester, academic_year: b.academic_year, date: fmtDate(b.created_at) }, false);
 }
-
-function closeModal() { document.getElementById('modalBackdrop').style.display = 'none'; }
 
 init();
 </script>

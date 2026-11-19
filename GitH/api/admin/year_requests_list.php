@@ -4,7 +4,7 @@ requireAdmin();
 $db = getDB();
 
 $where = ($_GET['status'] ?? 'pending') === 'all' ? '' : "WHERE r.status = 'pending'";
-$rows = $db->query("SELECT r.id, r.current_year_level, r.requested_year_level, r.status, r.review_note, r.created_at, r.reviewed_at,
+$rows = $db->query("SELECT r.id, r.current_year_level, r.requested_year_level, (r.id_photo_back IS NOT NULL) AS has_back, r.status, r.review_note, r.created_at, r.reviewed_at,
                             s.full_name, s.student_id_number, s.university_email,
                             a.full_name AS reviewed_by_name
                      FROM year_level_requests r

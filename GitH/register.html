@@ -3,77 +3,80 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LASSO — Student Registration</title>
+<title>Create your account — LASSO</title>
 <link rel="stylesheet" href="/assets/css/style.css">
 </head>
-<body>
-<div class="auth-shell">
-  <div class="auth-card" style="max-width:560px;">
-    <h1>Create Student Account</h1>
-    <p class="sub">Registration is required before you can browse the Store.</p>
-    <div id="alertBox"></div>
-    <form id="regForm">
-      <label>University Email</label>
-      <input type="email" id="university_email" required>
-
-      <label>Student ID Number</label>
-      <input type="text" id="student_id_number" required placeholder="e.g. 2023-00123">
-
-      <label>Full Name</label>
-      <input type="text" id="full_name" required>
-
-      <div class="form-row">
-        <div>
-          <label>College Department</label>
-          <select id="department_id" required></select>
-        </div>
-        <div>
-          <label>Course</label>
-          <select id="program_id" required></select>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div>
-          <label>Year Level</label>
-          <select id="year_level" required>
-            <option value="">Select</option>
-            <option>1st Year</option><option>2nd Year</option>
-            <option>3rd Year</option><option>4th Year</option><option>5th Year</option>
-          </select>
-        </div>
-        <div>
-          <label>Section</label>
-          <input type="text" id="section" required placeholder="e.g. 3B">
-        </div>
-      </div>
-
-      <label>Password</label>
-      <input type="password" id="password" required minlength="8" placeholder="At least 8 characters">
-
-      <label>Student ID Photo — Front</label>
-      <input type="file" id="id_photo_front" accept="image/*" required>
-
-      <label>Student ID Photo — Back</label>
-      <input type="file" id="id_photo_back" accept="image/*" required>
-      <p class="muted">Used solely to verify you are a currently enrolled student.</p>
-
-      <button class="btn btn-primary btn-block" style="margin-top:18px;" type="submit">Register</button>
-    </form>
-    <p class="switch-link">Already have an account? <a href="/index.html" style="color:var(--navy); font-weight:700;">Log in</a></p>
-  </div>
+<body class="reg">
+<div class="reg-top">
+  <a class="brand" href="/index.html"><span class="brand-mark">L</span>LASSO</a>
+  <span class="muted">Already registered? <a href="/index.html"><b>Log in</b></a></span>
 </div>
+
+<div class="reg-card">
+  <h1>Create your account</h1>
+  <p class="page-sub">Register with your official <b>@students.isatu.edu.ph</b> email. An administrator checks your ID before you can use the store.</p>
+  <div id="alertBox"></div>
+
+  <form id="regForm">
+    <div class="reg-section">
+      <h2><span class="step-no">1</span> Account</h2>
+      <div class="form-row">
+        <div><label for="student_id_number">Student ID number</label><input type="text" id="student_id_number" required placeholder="e.g. 2023-00123"></div>
+        <div><label for="full_name">Full name</label><input type="text" id="full_name" required placeholder="Juan Dela Cruz"></div>
+      </div>
+      <label for="university_email">University email</label>
+      <input type="email" id="university_email" required placeholder="name@students.isatu.edu.ph">
+      <div class="form-row">
+        <div><label for="password">Password</label><input type="password" id="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></div>
+        <div><label for="password_confirm">Confirm password</label><input type="password" id="password_confirm" required minlength="8" autocomplete="new-password" placeholder="Type it again"></div>
+      </div>
+      <div class="field-hint">Type your password twice. Both entries must match.</div>
+    </div>
+
+    <div class="reg-section">
+      <h2><span class="step-no">2</span> Academic details</h2>
+      <div class="form-row">
+        <div><label for="department_id">College department</label><select id="department_id" required></select></div>
+        <div><label for="program_id">Course</label><select id="program_id" required></select></div>
+      </div>
+      <div class="form-row">
+        <div><label for="year_level">Year level</label>
+          <select id="year_level" required>
+            <option value="">Select year level</option>
+            <option>1st Year</option><option>2nd Year</option><option>3rd Year</option><option>4th Year</option><option>5th Year</option>
+          </select></div>
+        <div><label for="section">Section</label><input type="text" id="section" required placeholder="e.g. 3B"></div>
+      </div>
+    </div>
+
+    <div class="reg-section">
+      <h2><span class="step-no">3</span> Student ID verification</h2>
+      <p class="muted" style="margin-bottom:12px;">Upload clear photos of your school ID, front and back, validated for this school year.</p>
+      <div class="form-row">
+        <div id="dzFront"></div>
+        <div id="dzBack"></div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-block" style="margin-top:28px; padding:13px;" type="submit" id="regBtn">Create account</button>
+  </form>
+</div>
+
 <script src="/assets/js/api.js"></script>
+<script src="/assets/js/ui.js"></script>
 <script>
 let programs = [];
+
+document.getElementById('dzFront').innerHTML = dropzoneHtml('id_photo_front', 'ID photo — front', 'Click to choose or drag a file here');
+document.getElementById('dzBack').innerHTML = dropzoneHtml('id_photo_back', 'ID photo — back', 'Click to choose or drag a file here');
+bindDropzones();
 
 async function loadRefs() {
   const r = await apiGet('/reference_data.php');
   if (!r.success) return;
   programs = r.programs;
   const dep = document.getElementById('department_id');
-  dep.innerHTML = '<option value="">Select department</option>' +
-    r.departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+  dep.innerHTML = '<option value="">Select department</option>' + r.departments.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
   dep.addEventListener('change', renderPrograms);
   renderPrograms();
 }
@@ -83,15 +86,23 @@ function renderPrograms() {
   const prog = document.getElementById('program_id');
   const filtered = programs.filter(p => String(p.department_id) === String(depId));
   prog.innerHTML = (filtered.length ? '<option value="">Select course</option>' : '<option value="">No courses set up for this department yet</option>') +
-    filtered.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    filtered.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
 }
 
 loadRefs();
 
 document.getElementById('regForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const box = document.getElementById('alertBox');
+  const box = document.getElementById('alertBox'), btn = document.getElementById('regBtn');
   box.innerHTML = '';
+  const pw = document.getElementById('password'), pw2 = document.getElementById('password_confirm');
+  pw2.classList.remove('is-error');
+  if (pw.value !== pw2.value) {
+    pw2.classList.add('is-error');
+    box.innerHTML = '<div class="alert alert-error">The two passwords do not match.</div>';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
 
   const fd = new FormData();
   fd.append('university_email', document.getElementById('university_email').value.trim());
@@ -101,17 +112,21 @@ document.getElementById('regForm').addEventListener('submit', async (e) => {
   fd.append('program_id', document.getElementById('program_id').value);
   fd.append('year_level', document.getElementById('year_level').value);
   fd.append('section', document.getElementById('section').value.trim());
-  fd.append('password', document.getElementById('password').value);
-  fd.append('id_photo_front', document.getElementById('id_photo_front').files[0]);
-  fd.append('id_photo_back', document.getElementById('id_photo_back').files[0]);
+  fd.append('password', pw.value);
+  fd.append('password_confirm', pw2.value);
+  fd.append('id_photo_front', document.querySelector('input[name="id_photo_front"]').files[0]);
+  fd.append('id_photo_back', document.querySelector('input[name="id_photo_back"]').files[0]);
 
+  btn.disabled = true; btn.textContent = 'Creating account…';
   const res = await fetch('/api/auth/register.php', { method: 'POST', body: fd, credentials: 'same-origin' });
   const r = await res.json();
   if (r.success) {
-    box.innerHTML = `<div class="alert alert-success">${r.message}</div>`;
+    box.innerHTML = `<div class="alert alert-success">${esc(r.message)}</div>`;
     setTimeout(() => window.location.href = '/index.html', 1200);
   } else {
-    box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
+    btn.disabled = false; btn.textContent = 'Create account';
+    box.innerHTML = `<div class="alert alert-error">${esc(r.message)}</div>`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 });
 </script>

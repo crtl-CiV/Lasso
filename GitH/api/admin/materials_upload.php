@@ -94,6 +94,7 @@ $yearMask = tagMask($_POST['year_levels'] ?? '', 5);
 $semesterMask = tagMask($_POST['semesters'] ?? '', 2);
 $price = (float)($_POST['price'] ?? 0);
 $authorName = trim($_POST['author_name'] ?? '');
+$subjectCode = substr(trim($_POST['subject_code'] ?? ''), 0, 30) ?: null;
 $nonBodyPages = json_decode($_POST['non_body_pages'] ?? '[]', true) ?: [];
 $previewExcluded = json_decode($_POST['preview_excluded_pages'] ?? '[]', true) ?: [];
 
@@ -125,10 +126,10 @@ if (!$hasPagesNow && !$expectMoreBatches) {
 
 $code = genCode('LM', 6);
 $stmt = $db->prepare("INSERT INTO instructional_materials
-    (material_code, title, description, department_id, program_id, year_level, year_mask, semester_mask, price, author_id, total_pages, non_body_pages, preview_excluded_pages, status, uploaded_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'draft', ?)
+    (material_code, title, description, department_id, program_id, year_level, year_mask, semester_mask, price, author_id, total_pages, non_body_pages, preview_excluded_pages, status, uploaded_by, subject_code)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'draft', ?, ?)
     RETURNING id");
-$stmt->execute([$code, $title, $description, $departmentId, $programId, $yearLevel, $yearMask, $semesterMask, $price, $authorId, json_encode($nonBodyPages), json_encode($previewExcluded), $admin['id']]);
+$stmt->execute([$code, $title, $description, $departmentId, $programId, $yearLevel, $yearMask, $semesterMask, $price, $authorId, json_encode($nonBodyPages), json_encode($previewExcluded), $admin['id'], $subjectCode]);
 $materialId = (int)$stmt->fetchColumn();
 
 $coverPath = saveCover($materialId);

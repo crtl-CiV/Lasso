@@ -5,7 +5,8 @@ require_once __DIR__ . '/../config/storage.php';
 requireAdmin();
 $db = getDB();
 
-$stmt = $db->prepare("SELECT id_photo FROM year_level_requests WHERE id = ?");
+$col = (($_GET['side'] ?? '') === 'back') ? 'id_photo_back' : 'id_photo';
+$stmt = $db->prepare("SELECT $col FROM year_level_requests WHERE id = ?");
 $stmt->execute([(int)($_GET['id'] ?? 0)]);
 $path = $stmt->fetchColumn();
 if (!$path) respond(false, 'Photo not found.', 404);

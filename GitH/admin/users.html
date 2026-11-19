@@ -7,210 +7,201 @@
 <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
-<div class="topbar">
-  <div class="brand">LASSO Admin<span class="dot">.</span></div>
-  <nav>
-    <a href="/admin/dashboard.html">Dashboard</a>
-    <a href="/admin/materials.html">Materials</a>
-    <a href="/admin/users.html" class="active">Users</a>
-    <a href="/admin/sales.html">Sales</a>
-    <button onclick="logout('/index.html')">Logout</button>
-  </nav>
-</div>
+<div class="admin" id="adminRoot">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="scrim" onclick="toggleAdminNav()"></div>
+  <div class="admin-main">
+    <div class="admin-top" id="adminTop"></div>
 
-<div class="page container">
-  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-    <h1>Manage User Accounts</h1>
-    <button class="btn btn-gold" onclick="openNewAdminModal()">+ Register Admin</button>
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Users</h1>
+        <p class="page-sub">Manage student and administrator accounts, and review year-level requests.</p>
+      </div>
+      <button class="btn btn-primary" onclick="openNewAdminModal()"><span id="plusIcon"></span> Register admin</button>
+    </div>
+
+    <div class="toolbar">
+      <div class="tabs" id="tabs">
+        <button class="active" data-tab="students">Students<span class="count" id="cStudents"></span></button>
+        <button data-tab="admins">Administrators<span class="count" id="cAdmins"></span></button>
+        <button data-tab="requests">Year-level requests<span class="count" id="cRequests"></span></button>
+      </div>
+      <div class="search" style="margin-left:auto; max-width:320px;" id="searchBox">
+        <span id="searchIcon"></span>
+        <input type="text" id="search" placeholder="Search name, ID or email…" aria-label="Search">
+      </div>
+    </div>
+
+    <div class="card flush">
+      <div class="table-wrap"><table id="usersTable"></table></div>
+    </div>
   </div>
-
-  <div class="tabs">
-    <button class="active" onclick="switchTab('students', this)">Students</button>
-    <button onclick="switchTab('admins', this)">Administrators</button>
-    <button onclick="switchTab('requests', this)" id="requestsTab">Year Level Requests</button>
-  </div>
-
-  <div class="card">
-    <table id="usersTable"></table>
-  </div>
-</div>
-
-<div id="modalBackdrop" class="modal-backdrop" style="display:none;">
-  <div class="modal" id="modalContent" style="max-width:700px;"></div>
 </div>
 
 <script src="/assets/js/api.js"></script>
+<script src="/assets/js/ui.js"></script>
 <script>
-let currentType = 'students';
+let tab = 'students', students = [], admins = [], requests = [];
+const subsData = {};
 
 async function init() {
-  await requireAuth('admin');
-  await loadUsers();
-  refreshRequestCount();
+  const user = await requireAuth('admin');
+  renderAdminShell('users', user);
+  document.getElementById('plusIcon').innerHTML = icon('plus', 18);
+  document.getElementById('searchIcon').innerHTML = icon('search', 18);
+  document.getElementById('search').addEventListener('input', render);
+  document.getElementById('tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    tab = b.dataset.tab;
+    document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('active', x === b));
+    document.getElementById('searchBox').style.visibility = tab === 'requests' ? 'hidden' : 'visible';
+    render();
+  });
+  await loadAll();
 }
 
-function switchTab(type, btn) {
-  currentType = type;
-  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  loadUsers();
+async function loadAll() {
+  const [s, a, q] = await Promise.all([
+    apiGet('/admin/users_list.php?type=students'), apiGet('/admin/users_list.php?type=admins'), apiGet('/admin/year_requests_list.php?status=all'),
+  ]);
+  students = s.success ? s.students : []; admins = a.success ? a.admins : []; requests = q.success ? q.requests : [];
+  render();
 }
 
-async function refreshRequestCount() {
-  const r = await apiGet('/admin/year_requests_list.php');
-  const n = r.success ? r.requests.length : 0;
-  document.getElementById('requestsTab').textContent = n ? `Year Level Requests (${n})` : 'Year Level Requests';
-}
-
-async function loadUsers() {
+function render() {
+  document.getElementById('cStudents').textContent = ` ${students.length}`;
+  document.getElementById('cAdmins').textContent = ` ${admins.length}`;
+  const pending = requests.filter(r => r.status === 'pending').length;
+  document.getElementById('cRequests').textContent = pending ? ` ${pending}` : '';
   const table = document.getElementById('usersTable');
-  if (currentType === 'requests') return loadRequests(table);
-
-  const r = await apiGet(`/admin/users_list.php?type=${currentType}`);
-  if (!r.success) { table.innerHTML = `<tr><td>${r.message}</td></tr>`; return; }
-
-  if (currentType === 'students') {
-    table.innerHTML = `<thead><tr><th>Student ID</th><th>Name</th><th>Course</th><th>Year/Section</th><th>Active Subs</th><th>Status</th><th></th></tr></thead>
-      <tbody>${r.students.map(s => { studentCache[s.id] = s; return `
-        <tr>
-          <td>${esc(s.student_id_number)}</td>
-          <td>${esc(s.full_name)}<div class="muted">${esc(s.university_email)}</div></td>
-          <td>${esc(s.program_name || '—')}</td>
-          <td>${esc(s.year_level)} - ${esc(s.section)}</td>
-          <td>${s.active_subscriptions}</td>
-          <td><span class="tag ${s.status === 'active' ? 'tag-active' : 'tag-trashed'}">${s.status}</span></td>
-          <td style="white-space:nowrap;">
-            <button class="btn btn-outline btn-sm" id="subbtn-${s.id}" onclick="toggleSubs(${s.id})">Subscriptions ▾</button>
-            ${s.status === 'active'
-              ? `<button class="btn btn-danger btn-sm" onclick="userAction(${s.id},'student','trash')">Trash</button>`
-              : `<button class="btn btn-outline btn-sm" onclick="userAction(${s.id},'student','restore')">Restore</button>
-                 <button class="btn btn-danger btn-sm" onclick="confirmUserDelete(${s.id},'student',${s.active_subscriptions})">Delete Permanently</button>`}
-          </td>
-        </tr>
-        <tr id="subrow-${s.id}" style="display:none;"><td colspan="7" style="background:#f8fafc;"></td></tr>`; }).join('') || '<tr><td colspan="7" class="muted">No students yet.</td></tr>'}</tbody>`;
-  } else {
-    table.innerHTML = `<thead><tr><th>Admin ID</th><th>Name</th><th>Email</th><th>Position</th><th>Status</th><th></th></tr></thead>
-      <tbody>${r.admins.map(a => `
-        <tr>
-          <td>${a.admin_id}</td>
-          <td>${a.full_name}</td>
-          <td>${a.email || '—'}</td>
-          <td>${a.position}</td>
-          <td><span class="tag ${a.status === 'active' ? 'tag-active' : 'tag-trashed'}">${a.status}</span></td>
-          <td>
-            ${a.status === 'active'
-              ? `<button class="btn btn-danger btn-sm" onclick="userAction(${a.id},'admin','trash')">Trash</button>`
-              : `<button class="btn btn-outline btn-sm" onclick="userAction(${a.id},'admin','restore')">Restore</button>
-                 <button class="btn btn-danger btn-sm" onclick="confirmUserDelete(${a.id},'admin',0)">Delete Permanently</button>`}
-          </td>
-        </tr>`).join('') || '<tr><td colspan="6" class="muted">No administrators yet.</td></tr>'}</tbody>`;
-  }
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  const match = (...vals) => !q || vals.some(v => String(v || '').toLowerCase().includes(q));
+  if (tab === 'students') renderStudents(table, students.filter(s => match(s.full_name, s.student_id_number, s.university_email)));
+  else if (tab === 'admins') renderAdmins(table, admins.filter(a => match(a.full_name, a.admin_id, a.email)));
+  else renderRequests(table);
 }
 
-/* ---------- Year level requests ---------- */
-async function loadRequests(table) {
-  const r = await apiGet('/admin/year_requests_list.php?status=all');
-  if (!r.success) { table.innerHTML = `<tr><td>${r.message}</td></tr>`; return; }
-  const tag = { pending: 'tag-draft', approved: 'tag-active', rejected: 'tag-trashed' };
-  table.innerHTML = `<thead><tr><th>Student</th><th>Change</th><th>Submitted</th><th>Status</th><th></th></tr></thead>
-    <tbody>${r.requests.map(q => `
+/* ---------------- students ---------------- */
+function renderStudents(table, list) {
+  table.innerHTML = `<thead><tr><th>Student</th><th>Student ID</th><th>Course</th><th>Year · Section</th><th>Status</th><th class="text-right">Actions</th></tr></thead>
+    <tbody>${list.map(s => `
       <tr>
-        <td>${q.full_name}<div class="muted">${q.student_id_number}</div></td>
-        <td>${q.current_year_level} &rarr; <b>${q.requested_year_level}</b></td>
-        <td>${new Date(q.created_at).toLocaleString()}</td>
-        <td><span class="tag ${tag[q.status]}">${q.status}</span>
-            ${q.status !== 'pending' ? `<div class="muted">by ${q.reviewed_by_name || '—'}${q.review_note ? ' — ' + q.review_note : ''}</div>` : ''}</td>
-        <td style="white-space:nowrap;">
-          <button class="btn btn-outline btn-sm" onclick="viewProof(${q.id})">View ID</button>
+        <td><div class="person"><span class="avatar">${esc(initials(s.full_name))}</span><div class="stack"><span class="name">${esc(s.full_name)}</span><span class="muted small">${esc(s.university_email)}</span></div></div></td>
+        <td>${esc(s.student_id_number)}</td>
+        <td>${esc(s.program_name || '—')}</td>
+        <td>${esc(s.year_level)} · ${esc(s.section)}</td>
+        <td>${badge(s.status === 'active' ? 'success' : 'danger', s.status === 'active' ? 'Active' : 'Trashed')}</td>
+        <td class="text-right" style="white-space:nowrap;">
+          <button class="btn btn-outline btn-sm" onclick="viewSubscriptions(${s.id})">${icon('library', 14)} Subscriptions <span class="muted">(${s.active_subscriptions})</span></button>
+          ${s.status === 'active'
+            ? `<button class="btn btn-danger btn-sm" onclick="userAction(${s.id},'student','trash')">Trash</button>`
+            : `<button class="btn btn-outline btn-sm" onclick="userAction(${s.id},'student','restore')">Restore</button>
+               <button class="btn btn-danger btn-sm" onclick="confirmUserDelete(${s.id},'student',${s.active_subscriptions})">Delete permanently</button>`}
+        </td>
+      </tr>`).join('') || '<tr><td colspan="6" class="muted">No students found.</td></tr>'}</tbody>`;
+}
+
+/* ---------------- administrators ---------------- */
+function renderAdmins(table, list) {
+  table.innerHTML = `<thead><tr><th>Administrator</th><th>Admin ID</th><th>Position</th><th>Status</th><th class="text-right">Actions</th></tr></thead>
+    <tbody>${list.map(a => `
+      <tr>
+        <td><div class="person"><span class="avatar">${esc(initials(a.full_name))}</span><div class="stack"><span class="name">${esc(a.full_name)}</span><span class="muted small">${esc(a.email || '—')}</span></div></div></td>
+        <td>${esc(a.admin_id)}</td>
+        <td>${esc(a.position)}</td>
+        <td>${badge(a.status === 'active' ? 'success' : 'danger', a.status === 'active' ? 'Active' : 'Trashed')}</td>
+        <td class="text-right" style="white-space:nowrap;">
+          ${a.status === 'active'
+            ? `<button class="btn btn-danger btn-sm" onclick="userAction(${a.id},'admin','trash')">Trash</button>`
+            : `<button class="btn btn-outline btn-sm" onclick="userAction(${a.id},'admin','restore')">Restore</button>
+               <button class="btn btn-danger btn-sm" onclick="confirmUserDelete(${a.id},'admin',0)">Delete permanently</button>`}
+        </td>
+      </tr>`).join('') || '<tr><td colspan="5" class="muted">No administrators found.</td></tr>'}</tbody>`;
+}
+
+/* ---------------- year-level requests ---------------- */
+function renderRequests(table) {
+  const kind = { pending: 'neutral', approved: 'success', rejected: 'danger' };
+  table.innerHTML = `<thead><tr><th>Student</th><th>Change</th><th>Submitted</th><th>Status</th><th class="text-right">Actions</th></tr></thead>
+    <tbody>${requests.map(q => `
+      <tr>
+        <td><div class="person"><span class="avatar">${esc(initials(q.full_name))}</span><div class="stack"><span class="name">${esc(q.full_name)}</span><span class="muted small">${esc(q.student_id_number)}</span></div></div></td>
+        <td>${esc(q.current_year_level)} &rarr; <b>${esc(q.requested_year_level)}</b></td>
+        <td>${fmtDate(q.created_at)}</td>
+        <td>${badge(kind[q.status], q.status[0].toUpperCase() + q.status.slice(1))}
+            ${q.status !== 'pending' ? `<div class="muted small">by ${esc(q.reviewed_by_name || '—')}${q.review_note ? ' — ' + esc(q.review_note) : ''}</div>` : ''}</td>
+        <td class="text-right" style="white-space:nowrap;">
+          <button class="btn btn-outline btn-sm" onclick='viewProof(${q.id}, ${q.has_back ? 'true' : 'false'}, ${JSON.stringify(q.full_name).replace(/'/g, "&#39;")})'>${icon('eye', 14)} View ID</button>
           ${q.status === 'pending' ? `
             <button class="btn btn-primary btn-sm" onclick="decideRequest(${q.id}, 'approve')">Approve</button>
             <button class="btn btn-danger btn-sm" onclick="decideRequest(${q.id}, 'reject')">Reject</button>` : ''}
         </td>
-      </tr>`).join('') || '<tr><td colspan="5" class="muted">No year level requests yet.</td></tr>'}</tbody>`;
+      </tr>`).join('') || '<tr><td colspan="5" class="muted">No year-level requests yet.</td></tr>'}</tbody>`;
 }
 
-function viewProof(id) {
-  document.getElementById('modalContent').innerHTML = `
-    <h2>ID photo</h2>
-    <img src="/api/admin/year_request_photo.php?id=${id}" alt="ID photo" style="width:100%; border-radius:8px; border:1px solid #e5e7eb;">
-    <button class="btn btn-outline btn-block" style="margin-top:14px;" onclick="closeModal()">Close</button>`;
-  document.getElementById('modalBackdrop').style.display = 'flex';
+function viewProof(id, hasBack, name) {
+  const img = (side, label) => `<div><div style="font-size:11px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; color:var(--slate-500); margin-bottom:6px;">${label}</div>
+    <img src="/api/admin/year_request_photo.php?id=${id}&side=${side}" alt="ID ${label}" style="width:100%; border-radius:12px; border:1px solid var(--slate-200);"></div>`;
+  openModal(`
+    ${modalHead('ID photos', esc(name))}
+    <div class="${hasBack ? 'form-row' : ''}">${img('front', 'Front')}${hasBack ? img('back', 'Back') : '<p class="muted" style="margin-top:8px;">This older request has only the front photo.</p>'}</div>
+    <button class="btn btn-outline btn-block" style="margin-top:16px;" onclick="closeModal()">Close</button>`, { wide: hasBack ? 820 : 600 });
 }
 
 async function decideRequest(id, action) {
   let note = '';
-  if (action === 'reject') {
-    note = prompt('Reason for rejecting (shown to the student):') ;
-    if (note === null) return;
-  } else if (!confirm('Approve this request and update the student\'s year level?')) return;
+  if (action === 'reject') { note = prompt('Reason for rejecting (shown to the student):'); if (note === null) return; }
+  else if (!confirm("Approve this request and update the student's year level?")) return;
   const r = await apiPost('/admin/year_request_action.php', { id, action, note });
-  if (r.success) { toast(r.message, 'success'); loadUsers(); refreshRequestCount(); }
-  else toast(r.message, 'error');
+  if (r.success) { toast(r.message, 'success'); loadAll(); } else toast(r.message, 'error');
 }
 
-/* ---------- Student subscriptions (expandable row) ---------- */
-const studentCache = {};
-const subsData = {};
-
-async function toggleSubs(id) {
-  const row = document.getElementById('subrow-' + id);
-  const btn = document.getElementById('subbtn-' + id);
-  if (row.style.display !== 'none') { row.style.display = 'none'; btn.textContent = 'Subscriptions ▾'; return; }
-  row.style.display = 'table-row';
-  btn.textContent = 'Hide ▴';
-  if (!row.dataset.loaded) {
-    row.firstElementChild.innerHTML = '<div class="muted">Loading…</div>';
-    const r = await apiGet(`/admin/subscription_status.php?student_id=${id}`);
-    subsData[id] = r.success ? r.subscriptions : [];
-    row.dataset.loaded = '1';
-    renderSubs(id, 'all');
+/* ---------------- subscriptions (modal) ---------------- */
+async function viewSubscriptions(studentId, filter = 'all') {
+  const s = students.find(x => x.id === studentId); if (!s) return;
+  if (!subsData[studentId]) {
+    const r = await apiGet(`/admin/subscription_status.php?student_id=${studentId}`);
+    subsData[studentId] = r.success ? r.subscriptions : [];
   }
-}
-
-function renderSubs(id, filter) {
-  const s = studentCache[id];
-  const all = subsData[id] || [];
-  const active = all.filter(subIsActive);
+  const all = subsData[studentId], active = all.filter(subIsActive);
   const shown = filter === 'active' ? active : filter === 'expired' ? all.filter(x => !subIsActive(x)) : all;
-  const info = (label, value) => `<div><div class="muted" style="font-size:.72rem; text-transform:uppercase;">${label}</div><div style="font-weight:600;">${value || '—'}</div></div>`;
-
-  document.getElementById('subrow-' + id).firstElementChild.innerHTML = `
-    <div style="padding:6px 4px;">
-      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:14px;">
-        ${info('Student ID', esc(s.student_id_number))}
-        ${info('Email', esc(s.university_email))}
-        ${info('Department', esc(s.department_name))}
-        ${info('Course', esc(s.program_name))}
-        ${info('Year / Section', esc(s.year_level) + ' - ' + esc(s.section))}
-        ${info('Registered', s.created_at ? new Date(s.created_at).toLocaleDateString() : '')}
-      </div>
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
-        <b>Subscriptions — ${active.length} active, ${all.length - active.length} expired</b>
-        <select onchange="renderSubs(${id}, this.value)" style="width:auto;">
-          <option value="all" ${filter === 'all' ? 'selected' : ''}>Show all</option>
-          <option value="active" ${filter === 'active' ? 'selected' : ''}>Active only</option>
-          <option value="expired" ${filter === 'expired' ? 'selected' : ''}>Expired only</option>
-        </select>
-      </div>
-      <div style="overflow-x:auto;">
-      <table style="min-width:760px;">
-        <thead><tr><th>Material</th><th>Accessible for</th><th>Subscribed</th><th>Expires</th><th>Time left</th><th>Terms</th><th>Total paid</th><th>Billing / OR</th><th>Status</th></tr></thead>
+  const kv = (k, v) => `<div><div class="k">${k}</div><div class="v">${(v === 0 || v) ? v : '—'}</div></div>`;
+  openModal(`
+    ${modalHead(esc(s.full_name), `${esc(s.student_id_number)} · ${esc(s.program_name || '—')}`)}
+    <div class="kv">
+      ${kv('Email', esc(s.university_email))}${kv('Department', esc(s.department_name))}${kv('Year · Section', esc(s.year_level) + ' · ' + esc(s.section))}
+      ${kv('Registered', fmtDate(s.created_at))}
+      ${kv('Subscriptions', all.length)}${kv('Active', active.length)}${kv('Expired', all.length - active.length)}
+    </div>
+    <div class="row-gap" style="justify-content:space-between; margin-bottom:8px;">
+      <b>Subscriptions</b>
+      <select onchange="viewSubscriptions(${studentId}, this.value)" style="width:auto;" aria-label="Filter subscriptions">
+        <option value="all" ${filter === 'all' ? 'selected' : ''}>Show all</option>
+        <option value="active" ${filter === 'active' ? 'selected' : ''}>Active only</option>
+        <option value="expired" ${filter === 'expired' ? 'selected' : ''}>Expired only</option>
+      </select>
+    </div>
+    <div class="table-wrap" style="border:1px solid var(--slate-200); border-radius:12px;">
+      <table style="min-width:640px;">
+        <thead><tr><th>Material</th><th>Subscribed on</th><th>Duration</th><th>Expires</th><th>Status</th></tr></thead>
         <tbody>${shown.length ? shown.map(x => `
           <tr>
-            <td>${esc(x.title)}<div class="muted">${esc(x.material_code)} • ${esc(x.author_name || '—')}</div></td>
-            <td><span class="tag tag-year">${yearMaskLabel(x.year_mask)}</span> <span class="tag tag-sem">${semesterMaskLabel(x.semester_mask)}</span></td>
-            <td>${esc(x.start_date)}</td>
-            <td>${esc(x.expiry_date)}</td>
-            <td>${durationText(x.expiry_date)}</td>
-            <td>${x.semester_count}</td>
-            <td>${peso(x.total_paid)}</td>
-            <td>${esc(x.billing_code || '—')}<div class="muted">${x.receipt_number ? 'OR ' + esc(x.receipt_number) : ''}</div></td>
-            <td><span class="tag ${subIsActive(x) ? 'tag-active' : 'tag-expired'}">${subIsActive(x) ? 'active' : 'expired'}</span></td>
-          </tr>`).join('') : '<tr><td colspan="9" class="muted">No subscriptions to show.</td></tr>'}</tbody>
-      </table></div>
-    </div>`;
+            <td><b>${esc(x.title)}</b>
+              <div class="muted small">${esc(x.subject_code || x.material_code)}${x.author_name ? ' · ' + esc(x.author_name) : ''}</div>
+              <div class="tags" style="margin-top:4px;"><span class="badge badge-info">${esc(yearMaskLabel(x.year_mask))}</span><span class="badge badge-warning">${esc(semesterMaskLabel(x.semester_mask))}</span></div>
+              <div class="muted small" style="margin-top:4px;">Paid ${peso(x.total_paid)}${x.billing_code ? ' · ' + esc(x.billing_code) : ''}${x.receipt_number ? ' · OR ' + esc(x.receipt_number) : ''}</div></td>
+            <td>${fmtDate(x.start_date)}</td>
+            <td>${termsToMonths(x.semester_count)}</td>
+            <td>${fmtDate(x.expiry_date)}<div class="muted small">${durationText(x.expiry_date)}</div></td>
+            <td>${badge(subIsActive(x) ? 'success' : 'danger', subIsActive(x) ? 'Active' : 'Expired')}</td>
+          </tr>`).join('') : '<tr><td colspan="5" class="muted">No subscriptions to show.</td></tr>'}</tbody>
+      </table>
+    </div>
+    <button class="btn btn-outline btn-block" style="margin-top:16px;" onclick="closeModal()">Close</button>`, { wide: 820 });
 }
 
+/* ---------------- delete / trash ---------------- */
 function confirmUserDelete(id, type, activeSubs) {
   const warn = type === 'student' && activeSubs > 0
     ? `WARNING: this student still has ${activeSubs} active subscription(s).\n\nDeleting the account permanently removes it together with their subscriptions, reading progress, billing records and uploaded photos. This cannot be undone.\n\nDelete it anyway?`
@@ -220,44 +211,43 @@ function confirmUserDelete(id, type, activeSubs) {
 
 async function userAction(id, type, action, extra) {
   const r = await apiPost('/admin/users_action.php', Object.assign({ id, type, action }, extra || {}));
-  if (r.success) { toast(r.message, 'success'); loadUsers(); }
-  else toast(r.message, 'error');
+  if (r.success) { toast(r.message, 'success'); delete subsData[id]; loadAll(); } else toast(r.message, 'error');
 }
 
+/* ---------------- register admin ---------------- */
 function openNewAdminModal() {
-  document.getElementById('modalContent').innerHTML = `
-    <h2>Register Admin Account</h2>
+  openModal(`
+    ${modalHead('Register admin', 'Create another administrator account.')}
     <form id="newAdminForm">
-      <label>Admin ID</label><input type="text" id="na_id" required>
-      <label>Email</label><input type="email" id="na_email" required placeholder="e.g. name@example.com">
-      <label>Full Name</label><input type="text" id="na_name" required>
-      <label>Position</label><input type="text" id="na_position" required>
-      <label>Password</label><input type="password" id="na_password" minlength="8" required>
-      <div id="naAlert"></div>
-      <div style="display:flex; gap:10px; margin-top:14px;">
-        <button type="button" class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="btn btn-gold" style="flex:1;">Create</button>
+      <div class="form-row">
+        <div><label>Admin ID</label><input type="text" id="na_id" required></div>
+        <div><label>Full name</label><input type="text" id="na_name" required></div>
       </div>
-    </form>`;
-  document.getElementById('modalBackdrop').style.display = 'flex';
-
+      <label>Email</label><input type="email" id="na_email" required placeholder="name@example.com">
+      <div class="form-row">
+        <div><label>Position</label><input type="text" id="na_position" required></div>
+        <div><label>Password</label><input type="password" id="na_password" minlength="8" required></div>
+      </div>
+      <div id="naAlert"></div>
+      <div style="display:flex; gap:10px; margin-top:18px;">
+        <button type="button" class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" style="flex:1;">Create</button>
+      </div>
+    </form>`);
   document.getElementById('newAdminForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const r = await apiPost('/admin/register_admin.php', {
-      admin_id: document.getElementById('na_id').value.trim(),
-      email: document.getElementById('na_email').value.trim(),
-      full_name: document.getElementById('na_name').value.trim(),
-      position: document.getElementById('na_position').value.trim(),
+      admin_id: document.getElementById('na_id').value.trim(), email: document.getElementById('na_email').value.trim(),
+      full_name: document.getElementById('na_name').value.trim(), position: document.getElementById('na_position').value.trim(),
       password: document.getElementById('na_password').value,
     });
-    const box = document.getElementById('naAlert');
-    if (r.success) { toast(r.message, 'success'); closeModal(); switchTab('admins', document.querySelectorAll('.tabs button')[1]); }
-    else box.innerHTML = `<div class="alert alert-error">${r.message}</div>`;
+    if (r.success) {
+      toast(r.message, 'success'); closeModal(); tab = 'admins';
+      document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('active', x.dataset.tab === 'admins'));
+      loadAll();
+    } else document.getElementById('naAlert').innerHTML = `<div class="alert alert-error">${esc(r.message)}</div>`;
   });
 }
-
-function closeModal() { document.getElementById('modalBackdrop').style.display = 'none'; }
-document.getElementById('modalBackdrop').addEventListener('click', (e) => { if (e.target.id === 'modalBackdrop') closeModal(); });
 
 init();
 </script>

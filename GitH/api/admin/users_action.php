@@ -43,9 +43,9 @@ if ($action === 'delete') {
             respond(false, "This student still has $activeSubs active subscription(s). Confirm to delete the account anyway.", 409);
         }
 
-        $stmt = $db->prepare("SELECT id_photo FROM year_level_requests WHERE student_id = ?");
+        $stmt = $db->prepare("SELECT id_photo, id_photo_back FROM year_level_requests WHERE student_id = ?");
         $stmt->execute([$id]);
-        $privatePaths = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($stmt->fetchAll() as $yr) { $privatePaths[] = $yr['id_photo']; if (!empty($yr['id_photo_back'])) $privatePaths[] = $yr['id_photo_back']; }
         $stmt = $db->prepare("SELECT receipt_photo FROM billing_statements WHERE student_id = ? AND receipt_photo IS NOT NULL");
         $stmt->execute([$id]);
         $privatePaths = array_merge($privatePaths, $stmt->fetchAll(PDO::FETCH_COLUMN));
