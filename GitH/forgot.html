@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forgot password — LASSO</title>
+<link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body class="auth">
+<a class="auth-logo" href="/index.html"><span class="brand-mark">L</span>LASSO</a>
+<div class="auth-wrap">
+  <div class="login-card">
+    <!-- Step 1: ask for the email -->
+    <div id="step1">
+      <h1>Forgot password</h1>
+      <p class="page-sub">Enter the email you log in with. We'll send you a 6-digit code.</p>
+      <div id="alert1"></div>
+      <form id="requestForm">
+        <label for="email">Email</label>
+        <input type="email" id="email" required autocomplete="username" placeholder="e.g. juan.delacruz@students.isatu.edu.ph">
+        <button class="btn btn-primary btn-block" style="margin-top:24px; padding:13px;" type="submit" id="sendBtn">Send code</button>
+      </form>
+    </div>
+
+    <!-- Step 2: code + new password -->
+    <div id="step2" hidden>
+      <h1>Check your email</h1>
+      <p class="page-sub">We sent a 6-digit code to <b id="sentTo"></b>. It expires in 10 minutes. Can't find it? Check your Spam folder.</p>
+      <div id="alert2"></div>
+      <form id="resetForm">
+        <label for="code">6-digit code</label>
+        <input type="text" id="code" required inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="\d{6}" placeholder="123456" style="letter-spacing:6px; font-size:20px; font-weight:600;">
+        <label for="newPw">New password</label>
+        <input type="password" id="newPw" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters">
+        <label for="confirmPw">Confirm new password</label>
+        <input type="password" id="confirmPw" required minlength="8" autocomplete="new-password" placeholder="Type it again">
+        <button class="btn btn-primary btn-block" style="margin-top:24px; padding:13px;" type="submit" id="resetBtn">Reset password</button>
+      </form>
+      <p class="auth-foot"><button type="button" class="link-btn" id="resendBtn">Resend code</button> · <button type="button" class="link-btn" id="changeEmailBtn">Use a different email</button></p>
+    </div>
+
+    <!-- Step 3: done -->
+    <div id="step3" hidden>
+      <h1>Password updated</h1>
+      <p class="page-sub">You can now log in with your new password.</p>
+      <a class="btn btn-primary btn-block" style="padding:13px;" href="/index.html">Back to log in</a>
+    </div>
+
+    <p class="auth-foot" id="backLink">Remembered it? <a href="/index.html"><b>Log in</b></a></p>
+  </div>
+</div>
+<script src="/assets/js/api.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const show = n => { [1, 2, 3].forEach(i => $('step' + i).hidden = i !== n); $('backLink').hidden = n === 3; };
+const alertHtml = (msg, type) => `<div class="alert alert-${type}">${esc(msg)}</div>`;
+let email = '', cooldown = null;
+
+function startCooldown(sec) {
+  const btn = $('resendBtn'); clearInterval(cooldown);
+  let left = sec; btn.disabled = true; btn.textContent = `Resend code (${left}s)`;
+  cooldown = setInterval(() => {
+    left--;
+    if (left <= 0) { clearInterval(cooldown); btn.disabled = false; btn.textContent = 'Resend code'; }
+    else btn.textContent = `Resend code (${left}s)`;
+  }, 1000);
+}
+
+async function requestCode(target, btn, box) {
+  btn.disabled = true; const label = btn.textContent; btn.textContent = 'Sending…';
+  const r = await apiPost('/auth/forgot_request.php', { email: target });
+  btn.disabled = false; btn.textContent = label;
+  if (!r.success) {
+    box.innerHTML = alertHtml(r.message, 'error');
+    const wait = /wait (\d+) seconds/.exec(r.message || '');
+    if (wait && !$('step2').hidden) startCooldown(+wait[1]);
+    return false;
+  }
+  return true;
+}
+
+$('requestForm').addEventListener('submit', async (e) => {
+  e.preventDefault(); $('alert1').innerHTML = '';
+  const target = $('email').value.trim();
+  if (await requestCode(target, $('sendBtn'), $('alert1'))) {
+    email = target; $('sentTo').textContent = email; $('alert2').innerHTML = '';
+    show(2); startCooldown(60); $('code').focus();
+  }
+});
+
+$('resendBtn').addEventListener('click', async () => {
+  $('alert2').innerHTML = '';
+  if (await requestCode(email, $('resendBtn'), $('alert2'))) {
+    $('alert2').innerHTML = alertHtml('A new code was sent. Only the newest code works.', 'success');
+    startCooldown(60);
+  }
+});
+
+$('changeEmailBtn').addEventListener('click', () => { $('alert1').innerHTML = ''; show(1); $('email').focus(); });
+
+$('resetForm').addEventListener('submit', async (e) => {
+  e.preventDefault(); $('alert2').innerHTML = '';
+  if ($('newPw').value !== $('confirmPw').value) { $('alert2').innerHTML = alertHtml('The two passwords do not match.', 'error'); return; }
+  const btn = $('resetBtn'); btn.disabled = true; btn.textContent = 'Saving…';
+  const r = await apiPost('/auth/forgot_reset.php', {
+    email, code: $('code').value.trim(), new_password: $('newPw').value, confirm_password: $('confirmPw').value,
+  });
+  btn.disabled = false; btn.textContent = 'Reset password';
+  if (r.success) show(3);
+  else $('alert2').innerHTML = alertHtml(r.message, 'error');
+});
+
+// Arriving from the login page with the email already typed
+const pre = new URLSearchParams(location.search).get('email');
+if (pre) $('email').value = pre;
+</script>
+</body>
+</html>

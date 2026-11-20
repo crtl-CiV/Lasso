@@ -18,6 +18,7 @@
       <input type="text" id="identifier" required autocomplete="username" placeholder="e.g. juan.delacruz@students.isatu.edu.ph">
       <label for="password">Password</label>
       <input type="password" id="password" required autocomplete="current-password" placeholder="Your password">
+      <div style="text-align:right; margin-top:8px;"><a href="/forgot.html" class="small" onclick="const v=document.getElementById('identifier').value.trim(); if (v) this.href='/forgot.html?email='+encodeURIComponent(v);"><b>Forgot password?</b></a></div>
       <button class="btn btn-primary btn-block" style="margin-top:24px; padding:13px;" type="submit" id="loginBtn">Log in</button>
     </form>
     <p class="auth-foot">No account yet? <a href="/register.html"><b>Register</b></a></p>

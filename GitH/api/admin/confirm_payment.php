@@ -3,6 +3,7 @@
 // billing code, then either grants access to every material on that billing
 // (approve) or sends it back with a reason (reject).
 require_once __DIR__ . '/../config/bootstrap.php';
+require_once __DIR__ . '/../config/emailer.php';
 $admin = requireAdmin();
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(false, 'Invalid request method.', 405);
 
@@ -14,7 +15,7 @@ if (!$billingCode) respond(false, 'Billing code is required.', 422);
 if (!in_array($action, ['approve', 'reject'], true)) respond(false, 'Invalid action.', 422);
 
 $db = getDB();
-$stmt = $db->prepare("SELECT b.*, s.full_name, s.student_id_number
+$stmt = $db->prepare("SELECT b.*, s.full_name, s.student_id_number, s.university_email
                        FROM billing_statements b
                        JOIN students s ON s.id = b.student_id
                        WHERE b.billing_code = ?");
@@ -30,7 +31,8 @@ if ($action === 'reject') {
     if ($note === '') respond(false, 'Please give a reason so the student knows what to fix.', 422);
     $db->prepare("UPDATE billing_statements SET receipt_status = 'rejected', receipt_note = ? WHERE id = ?")
        ->execute([$note, $b['id']]);
-    respond(true, ['message' => 'Receipt rejected. The student can submit a corrected one.']);
+    $mailed = emailReceiptRejected($b['university_email'], $b['full_name'], $b['billing_code'], (string)$b['receipt_number'], $note);
+    respond(true, ['message' => 'Receipt rejected. The student can submit a corrected one.' . ($mailed ? ' They were notified by email.' : ' (The email notification could not be sent.)'), 'email_sent' => $mailed]);
 }
 
 // ---- approve: activate (or extend) a 3-month subscription per material ----
@@ -70,8 +72,16 @@ try {
     respond(false, 'Could not grant access: ' . $e->getMessage(), 500);
 }
 
+$st = $db->prepare("SELECT m.title, sub.expiry_date FROM billing_statement_items bi
+                     JOIN instructional_materials m ON m.id = bi.material_id
+                     JOIN subscriptions sub ON sub.material_id = bi.material_id AND sub.student_id = ?
+                     WHERE bi.billing_id = ? ORDER BY m.title");
+$st->execute([$b['student_id'], $b['id']]);
+$mailed = emailReceiptApproved($b['university_email'], $b['full_name'], $b['billing_code'], (string)$b['receipt_number'], $st->fetchAll());
+
 respond(true, [
     'message' => 'Receipt validated. Access granted.',
+    'email_sent' => $mailed,
     'student_name' => $b['full_name'],
     'student_id_number' => $b['student_id_number'],
     'materials' => array_column($materials, 'title'),

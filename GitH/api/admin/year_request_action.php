@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/bootstrap.php';
+require_once __DIR__ . '/../config/emailer.php';
 $admin = requireAdmin();
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(false, 'Invalid request method.', 405);
 
@@ -29,4 +30,10 @@ try {
     respond(false, 'Could not save the decision: ' . $e->getMessage(), 500);
 }
 
-respond(true, ['message' => $action === 'approve' ? 'Year level updated.' : 'Request rejected.']);
+$st = $db->prepare("SELECT full_name, university_email FROM students WHERE id = ?");
+$st->execute([$req['student_id']]);
+$mailed = false;
+if ($stu = $st->fetch()) {
+    $mailed = emailYearRequestResult($stu['university_email'], $stu['full_name'], $action === 'approve', $req['requested_year_level'], $note);
+}
+respond(true, ['message' => ($action === 'approve' ? 'Year level updated.' : 'Request rejected.') . ($mailed ? ' The student was notified by email.' : ' (The email notification could not be sent.)'), 'email_sent' => $mailed]);

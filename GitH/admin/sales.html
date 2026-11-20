@@ -171,7 +171,7 @@ async function approveBilling(code) {
   if (!r.success) { box.innerHTML = `<div class="alert alert-error">${esc(r.message)}</div>`; return; }
   closeModal();
   document.getElementById('billingAlert').innerHTML =
-    `<div class="alert alert-success">Access granted to <b>${esc(r.student_name)}</b> (${esc(r.student_id_number)}) for: ${r.materials.map(esc).join(', ')}.</div>`;
+    `<div class="alert alert-success">Access granted to <b>${esc(r.student_name)}</b> (${esc(r.student_id_number)}) for: ${r.materials.map(esc).join(', ')}. ${r.email_sent ? 'The student was notified by email.' : '<br><span class="small">The email notification could not be sent — let the student know directly.</span>'}</div>`;
   loadPending(); loadBillingHistory(); loadReport();
 }
 

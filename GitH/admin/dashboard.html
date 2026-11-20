@@ -34,6 +34,14 @@
       </div>
     </div>
 
+    <div class="card" id="reminderCard" style="margin-top:20px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;" hidden>
+      <div>
+        <h2 style="margin:0 0 4px;">Expiry reminders</h2>
+        <p class="muted small" id="reminderText" style="margin:0;"></p>
+      </div>
+      <button class="btn btn-outline" id="reminderBtn" onclick="sendReminders()">Send now</button>
+    </div>
+
     <div class="card flush" style="margin-top:20px;">
       <div class="card-head"><h2>Awaiting receipt review</h2><a href="/admin/sales.html" class="link-btn">View all</a></div>
       <div class="table-wrap">
@@ -87,6 +95,29 @@ async function init() {
       <td>${fmtDate(b.receipt_submitted_at)}</td>
       <td class="text-right"><a class="btn btn-primary btn-sm" href="/admin/sales.html?review=${encodeURIComponent(b.billing_code)}">Review</a></td>
     </tr>`).join('') : '<tr><td colspan="6" class="muted">No receipts are waiting for review.</td></tr>';
+  loadReminders();
+}
+
+// Reminders normally go out automatically once a day; this card is the manual backup.
+async function loadReminders() {
+  const r = await apiGet('/admin/expiry_reminders.php');
+  if (!r.success) return;
+  const card = document.getElementById('reminderCard'), btn = document.getElementById('reminderBtn'), txt = document.getElementById('reminderText');
+  card.hidden = false; card.style.display = 'flex';
+  if (!r.email_ready) { txt.textContent = 'Email is not set up yet, so reminders cannot be sent.'; btn.disabled = true; return; }
+  txt.textContent = r.due
+    ? `${r.due} student${r.due === 1 ? ' has' : 's have'} a subscription expiring within 7 days and ${r.due === 1 ? 'hasn\'t' : 'haven\'t'} been reminded yet. Reminders are sent automatically every day; send them now if you don't want to wait.`
+    : 'Everyone with a subscription expiring within 7 days has already been reminded.';
+  btn.disabled = !r.due;
+}
+
+async function sendReminders() {
+  const btn = document.getElementById('reminderBtn');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  const r = await apiPost('/admin/expiry_reminders.php', {});
+  btn.textContent = 'Send now';
+  toast(r.message, r.success ? 'success' : 'error');
+  loadReminders();
 }
 init();
 </script>
