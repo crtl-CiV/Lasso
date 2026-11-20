@@ -47,10 +47,10 @@ function toast(msg, type = 'info') {
   if (!el) {
     el = document.createElement('div');
     el.id = '__toast';
-    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:999;padding:12px 20px;border-radius:8px;font-size:.9rem;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.2);transition:opacity .3s;';
+    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:999;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:600;box-shadow:0 8px 24px rgba(15,23,42,.25);transition:opacity .3s;';
     document.body.appendChild(el);
   }
-  const colors = { info: '#1e3a8a', success: '#16a34a', error: '#dc2626' };
+  const colors = { info: '#4f46e5', success: '#16a34a', error: '#dc2626' };
   el.style.background = colors[type] || colors.info;
   el.style.color = '#fff';
   el.textContent = msg;
@@ -106,10 +106,20 @@ function daysLeft(expiryDate) {
 }
 function durationText(expiryDate) {
   const d = daysLeft(expiryDate);
+  if (d >= 45) return `${Math.round(d / 30.4)} months left`;
+  if (d >= 30) return '1 month left';
   if (d > 1) return `${d} days left`;
   if (d === 1) return '1 day left';
   if (d === 0) return 'Expires today';
   return `Expired ${Math.abs(d)} day${Math.abs(d) === 1 ? '' : 's'} ago`;
+}
+/** "3 months" for a number of 3-month semesters. */
+function termsToMonths(n) { return `${(n || 1) * 3} months`; }
+/** Short date: "Oct 24, 2026" from a YYYY-MM-DD string or a timestamp. */
+function fmtDate(v) {
+  if (!v) return '—';
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(v) ? v + 'T00:00:00' : v);
+  return isNaN(d) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 function subIsActive(s) { return s.status === 'active' && daysLeft(s.expiry_date) >= 0; }
 
@@ -117,29 +127,6 @@ async function logout(redirectTo) {
   await apiPost('/auth/logout.php', {});
   window.location.href = redirectTo || '/index.html';
 }
-
-/** Auto-injects a hamburger button next to the logo on every page that has
- *  a .topbar, so individual pages don't need markup changes. On mobile the
- *  button toggles the existing nav open/closed as a dropdown (see CSS). */
-function initMobileNav() {
-  const brand = document.querySelector('.topbar .brand');
-  const nav = document.querySelector('.topbar nav');
-  if (!brand || !nav) return;
-
-  const btn = document.createElement('button');
-  btn.className = 'hamburger';
-  btn.setAttribute('aria-label', 'Menu');
-  btn.textContent = '☰';
-  btn.onclick = () => nav.classList.toggle('nav-open');
-  brand.insertAdjacentElement('afterend', btn);
-
-  // Close the menu after tapping a link, and on outside taps
-  nav.addEventListener('click', (e) => { if (e.target.tagName === 'A') nav.classList.remove('nav-open'); });
-  document.addEventListener('click', (e) => {
-    if (!nav.contains(e.target) && !btn.contains(e.target)) nav.classList.remove('nav-open');
-  });
-}
-document.addEventListener('DOMContentLoaded', initMobileNav);
 
 // Basic piracy-deterrence measures on any page that includes this file
 document.addEventListener('contextmenu', (e) => {

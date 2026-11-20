@@ -7,156 +7,119 @@
 <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
-<div class="topbar">
-  <div class="brand">LASSO<span class="dot">.</span></div>
-  <nav>
-    <a href="/student/store.html">Store</a>
-    <a href="/student/cart.html">Cart<span class="badge-count" id="cartBadge" style="display:none;">0</span></a>
-    <a href="/student/library.html">Library</a>
-    <a href="/student/profile.html" class="active">Profile</a>
-    <button onclick="logout()">Logout</button>
-  </nav>
-</div>
+<header id="shell"></header>
 
-<div class="page container" style="max-width:640px;">
-  <h1>Profile</h1>
-
-  <div class="card">
-    <h2>Payments &amp; Receipts</h2>
-    <p class="muted">After paying at the school cashier, submit your official receipt (OR) for each billing. An administrator will check it and unlock your materials.</p>
-    <div id="receiptBox"></div>
+<main class="page" style="max-width:860px;">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Profile</h1>
+      <p class="page-sub">Your account details, year level and password.</p>
+    </div>
   </div>
 
   <div class="card">
-    <h2>Account Details</h2>
+    <div class="person" style="gap:18px; margin-bottom:20px;">
+      <span class="avatar avatar-lg" id="avatar">?</span>
+      <div class="stack"><div style="font-size:20px; font-weight:700;" id="pName">—</div><div class="muted" id="pId">—</div></div>
+    </div>
+    <div class="kv" style="margin-bottom:0;">
+      <div><div class="k">Email</div><div class="v" id="pEmail">—</div></div>
+      <div><div class="k">Department</div><div class="v" id="pDept">—</div></div>
+      <div><div class="k">Course</div><div class="v" id="pCourse">—</div></div>
+      <div><div class="k">Year level</div><div class="v" id="pYear">—</div></div>
+      <div><div class="k">Section</div><div class="v" id="pSection">—</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-bottom:12px;">Account details</h2>
     <div id="profAlert"></div>
     <form id="profForm">
-      <label>Full Name</label>
-      <input type="text" id="full_name">
-      <label>Section</label>
-      <input type="text" id="section">
-      <label>Profile Photo</label>
-      <input type="file" id="profile_photo" accept="image/*">
-      <button class="btn btn-primary" style="margin-top:14px;" type="submit">Save Changes</button>
+      <div class="form-row">
+        <div><label for="full_name">Full name</label><input type="text" id="full_name" required></div>
+        <div><label for="section">Section</label><input type="text" id="section" required></div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:16px;" type="submit">Save changes</button>
     </form>
   </div>
 
   <div class="card">
-    <h2>Year Level</h2>
-    <p class="muted">Your year level decides which instructional materials you can see. To change it, submit a photo of your ID validated for the new year level. An administrator will review it.</p>
-    <p>Current year level: <b id="curYear">—</b></p>
+    <h2>Year level</h2>
+    <p class="muted" style="margin:4px 0 12px;">Your year level decides which materials you can see. To change it, submit photos of the front and back of your ID, validated for the new year level. An administrator will review them.</p>
     <div id="yrStatus"></div>
     <div id="yrAlert"></div>
     <form id="yrForm">
-      <label>Request year level</label>
+      <label for="yr_requested">Request year level</label>
       <select id="yr_requested" required>
-        <option value="">Select year level…</option>
+        <option value="">Select year level</option>
         <option>1st Year</option><option>2nd Year</option><option>3rd Year</option><option>4th Year</option><option>5th Year</option>
       </select>
-      <label>ID photo validated for that year level</label>
-      <input type="file" id="yr_photo" accept="image/*" required>
-      <button class="btn btn-primary" style="margin-top:14px;" type="submit" id="yrSubmit">Submit Request</button>
+      <div class="form-row" style="margin-top:14px;">
+        <div id="dzYrFront"></div>
+        <div id="dzYrBack"></div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:16px;" type="submit" id="yrSubmit">Submit request</button>
     </form>
   </div>
 
   <div class="card">
-    <h2>Change Password</h2>
+    <h2 style="margin-bottom:12px;">Change password</h2>
     <div id="pwAlert"></div>
     <form id="pwForm">
-      <label>Current Password</label>
-      <input type="password" id="current_password" required>
-      <label>New Password</label>
-      <input type="password" id="new_password" required minlength="8">
-      <button class="btn btn-outline" style="margin-top:14px;" type="submit">Update Password</button>
+      <div class="form-row">
+        <div><label for="current_password">Current password</label><input type="password" id="current_password" required autocomplete="current-password"></div>
+        <div><label for="new_password">New password</label><input type="password" id="new_password" required minlength="8" autocomplete="new-password"></div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:16px;" type="submit">Update password</button>
     </form>
   </div>
-</div>
+</main>
 
 <script src="/assets/js/api.js"></script>
+<script src="/assets/js/ui.js"></script>
 <script>
+document.getElementById('dzYrFront').innerHTML = dropzoneHtml('id_photo', 'ID photo — front', 'Click to choose or drag a file here');
+document.getElementById('dzYrBack').innerHTML = dropzoneHtml('id_photo_back', 'ID photo — back', 'Click to choose or drag a file here');
+bindDropzones();
+
 async function init() {
   const me = await requireAuth('student');
+  renderStudentShell('profile');
   document.getElementById('full_name').value = me.full_name;
   document.getElementById('section').value = me.section;
-  await refreshCartBadge();
+  showIdentity(me);
+  const refs = await apiGet('/reference_data.php');
+  if (refs.success) {
+    document.getElementById('pDept').textContent = (refs.departments.find(d => d.id == me.department_id) || {}).name || '—';
+    document.getElementById('pCourse').textContent = (refs.programs.find(p => p.id == me.program_id) || {}).name || '—';
+  }
   await loadYearStatus();
-  await loadReceipts();
+}
+
+function showIdentity(me) {
+  document.getElementById('avatar').textContent = initials(me.full_name);
+  document.getElementById('pName').textContent = me.full_name;
+  document.getElementById('pId').textContent = me.student_id_number;
+  document.getElementById('pEmail').textContent = me.university_email;
+  document.getElementById('pSection').textContent = me.section;
 }
 
 async function loadYearStatus() {
   const r = await apiGet('/auth/year_request_status.php');
   if (!r.success) return;
-  document.getElementById('curYear').textContent = r.current_year_level;
+  document.getElementById('pYear').textContent = r.current_year_level;
   const q = r.latest_request;
-  const box = document.getElementById('yrStatus');
-  const form = document.getElementById('yrForm');
-  form.style.display = 'block';
-  box.innerHTML = '';
+  const box = document.getElementById('yrStatus'), form = document.getElementById('yrForm');
+  form.style.display = 'block'; box.innerHTML = '';
   if (!q) return;
   if (q.status === 'pending') {
-    box.innerHTML = `<div class="alert alert-info">Your request to move to <b>${q.requested_year_level}</b> is waiting for administrator review.</div>`;
+    box.innerHTML = `<div class="alert alert-info">Your request to move to <b>${esc(q.requested_year_level)}</b> is waiting for administrator review.</div>`;
     form.style.display = 'none';
   } else if (q.status === 'rejected') {
-    box.innerHTML = `<div class="alert alert-error">Your last request (${q.requested_year_level}) was rejected${q.review_note ? ': ' + q.review_note : '.'} You can submit a new one below.</div>`;
+    box.innerHTML = `<div class="alert alert-error">Your last request (${esc(q.requested_year_level)}) was rejected${q.review_note ? ': ' + esc(q.review_note) : '.'} You can submit a new one below.</div>`;
   } else {
-    box.innerHTML = `<div class="alert alert-success">Your last request (${q.requested_year_level}) was approved.</div>`;
+    box.innerHTML = `<div class="alert alert-success">Your last request (${esc(q.requested_year_level)}) was approved.</div>`;
   }
-}
-
-async function refreshCartBadge() {
-  const r = await apiGet('/cart/list.php');
-  const badge = document.getElementById('cartBadge');
-  if (r.success && r.items.length) { badge.style.display = 'inline-block'; badge.textContent = r.items.length; }
-  else badge.style.display = 'none';
-}
-
-async function loadReceipts() {
-  const r = await apiGet('/subscription/status.php');
-  const box = document.getElementById('receiptBox');
-  if (!r.success || !r.pending_billings.length) {
-    box.innerHTML = '<p class="muted" style="margin:0;">No billings are waiting for a receipt.</p>';
-    return;
-  }
-  box.innerHTML = r.pending_billings.map(b => {
-    let status, form = '';
-    if (b.receipt_status === 'submitted') {
-      status = `<div class="alert alert-info">Receipt (OR ${b.receipt_number}) submitted — waiting for administrator review.</div>`;
-    } else {
-      if (b.receipt_status === 'rejected') {
-        status = `<div class="alert alert-error">Your receipt was rejected${b.receipt_note ? ': ' + b.receipt_note : '.'} Please submit it again.</div>`;
-      } else {
-        status = `<p class="muted" style="margin:6px 0;">Pay at the school cashier using this billing, then submit the OR you receive.</p>`;
-      }
-      form = `
-        <form class="rcpForm" data-code="${b.billing_code}">
-          <label>OR number</label>
-          <input type="text" name="receipt_number" required placeholder="Number printed on your receipt">
-          <label>Photo of the receipt</label>
-          <input type="file" name="receipt_photo" accept="image/*" required>
-          <button class="btn btn-gold" style="margin-top:12px;" type="submit">Submit Receipt</button>
-        </form>`;
-    }
-    return `
-      <div class="card" style="border-left:4px solid var(--gold); margin:12px 0 0;">
-        <b>Billing ${b.billing_code}</b> — ${peso(b.total_amount)}
-        ${status}${form}
-        <div class="rcpMsg"></div>
-      </div>`;
-  }).join('');
-
-  box.querySelectorAll('.rcpForm').forEach(f => f.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const fd = new FormData(f);
-    fd.append('billing_code', f.dataset.code);
-    const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Submitting…';
-    const res = await fetch('/api/cart/submit_receipt.php', { method: 'POST', body: fd, credentials: 'same-origin' });
-    const out = await res.json();
-    if (out.success) { toast(out.message, 'success'); loadReceipts(); }
-    else {
-      btn.disabled = false; btn.textContent = 'Submit Receipt';
-      f.closest('.card').querySelector('.rcpMsg').innerHTML = `<div class="alert alert-error">${out.message}</div>`;
-    }
-  }));
 }
 
 document.getElementById('profForm').addEventListener('submit', async (e) => {
@@ -165,11 +128,14 @@ document.getElementById('profForm').addEventListener('submit', async (e) => {
   const fd = new FormData();
   fd.append('full_name', document.getElementById('full_name').value.trim());
   fd.append('section', document.getElementById('section').value.trim());
-  const photo = document.getElementById('profile_photo').files[0];
-  if (photo) fd.append('profile_photo', photo);
   const res = await fetch('/api/auth/update_profile.php', { method: 'POST', body: fd, credentials: 'same-origin' });
   const r = await res.json();
-  box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${r.success ? 'Profile updated.' : r.message}</div>`;
+  box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${r.success ? 'Profile updated.' : esc(r.message)}</div>`;
+  if (r.success) {
+    document.getElementById('pName').textContent = document.getElementById('full_name').value.trim();
+    document.getElementById('pSection').textContent = document.getElementById('section').value.trim();
+    document.getElementById('avatar').textContent = initials(document.getElementById('full_name').value);
+  }
 });
 
 document.getElementById('yrForm').addEventListener('submit', async (e) => {
@@ -177,24 +143,26 @@ document.getElementById('yrForm').addEventListener('submit', async (e) => {
   const box = document.getElementById('yrAlert');
   const fd = new FormData();
   fd.append('requested_year_level', document.getElementById('yr_requested').value);
-  const photo = document.getElementById('yr_photo').files[0];
-  if (photo) fd.append('id_photo', photo);
+  const front = document.querySelector('input[name="id_photo"]').files[0], back = document.querySelector('input[name="id_photo_back"]').files[0];
+  if (front) fd.append('id_photo', front);
+  if (back) fd.append('id_photo_back', back);
   const btn = document.getElementById('yrSubmit');
   btn.disabled = true; btn.textContent = 'Submitting…';
   const res = await fetch('/api/auth/year_request_submit.php', { method: 'POST', body: fd, credentials: 'same-origin' });
   const r = await res.json();
-  btn.disabled = false; btn.textContent = 'Submit Request';
-  box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${r.message}</div>`;
-  if (r.success) { e.target.reset(); loadYearStatus(); }
+  btn.disabled = false; btn.textContent = 'Submit request';
+  box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${esc(r.message)}</div>`;
+  if (r.success) { e.target.reset(); document.querySelectorAll('#yrForm .dropzone').forEach(d => d.classList.remove('has-file')); loadYearStatus(); }
 });
 
 document.getElementById('pwForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const box = document.getElementById('pwAlert');
-  const current_password = document.getElementById('current_password').value;
-  const new_password = document.getElementById('new_password').value;
-  const r = await apiPost('/auth/change_password.php', { current_password, new_password });
-  box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${r.message}</div>`;
+  const r = await apiPost('/auth/change_password.php', {
+    current_password: document.getElementById('current_password').value,
+    new_password: document.getElementById('new_password').value,
+  });
+  box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${esc(r.message)}</div>`;
   if (r.success) e.target.reset();
 });
 

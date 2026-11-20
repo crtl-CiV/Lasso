@@ -7,124 +7,159 @@
 <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
-<div class="topbar">
-  <div class="brand">LASSO<span class="dot">.</span></div>
-  <nav>
-    <a href="/student/store.html">Store</a>
-    <a href="/student/cart.html">Cart<span class="badge-count" id="cartBadge" style="display:none;">0</span></a>
-    <a href="/student/library.html" class="active">Library</a>
-    <a href="/student/profile.html">Profile</a>
-    <button onclick="logout()">Logout</button>
-  </nav>
-</div>
+<header id="shell"></header>
 
-<div class="page container">
-  <h1>Library</h1>
-  <p class="muted">Your subscribed instructional materials, progress, and access status.</p>
-  <div id="grid" class="grid grid-3"></div>
-</div>
+<main class="page">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Library</h1>
+      <p class="page-sub">Everything you are subscribed to, with your reading progress.</p>
+    </div>
+  </div>
 
-<div id="modalBackdrop" class="modal-backdrop" style="display:none;">
-  <div class="modal" id="modalContent" style="max-width:700px;"></div>
+  <div class="tabs" id="tabs" style="margin-bottom:20px;">
+    <button class="active" data-tab="all">All<span class="count" id="cAll"></span></button>
+    <button data-tab="active">Active<span class="count" id="cActive"></span></button>
+    <button data-tab="expired">Expired<span class="count" id="cExpired"></span></button>
+  </div>
+
+  <div class="grid cols-3" id="grid"></div>
+</main>
+
+<!-- full-screen reader -->
+<div class="reader" id="reader">
+  <div class="reader-bar">
+    <button class="btn btn-outline btn-sm" id="backBtn" onclick="closeReader()">Back to Library</button>
+    <div class="title" id="readerTitle"></div>
+    <div class="muted" id="readerProgress"></div>
+  </div>
+  <div class="reader-stage protected" id="readerStage"></div>
+  <div class="reader-foot">
+    <button class="btn btn-outline btn-sm" id="prevBtn">Previous</button>
+    <span class="muted" id="readerPage"></span>
+    <button class="btn btn-primary btn-sm" id="nextBtn">Next</button>
+    <span class="protected-note" id="protectedNote"></span>
+  </div>
 </div>
 
 <script src="/assets/js/api.js"></script>
+<script src="/assets/js/ui.js"></script>
 <script>
+let library = [], tab = 'all', reading = null;
+
 async function init() {
   await requireAuth('student');
-  await refreshCartBadge();
+  renderStudentShell('library');
+  document.getElementById('backBtn').innerHTML = icon('back', 16) + ' Back to Library';
+  document.getElementById('prevBtn').innerHTML = icon('chevron-left', 16) + ' Previous';
+  document.getElementById('nextBtn').innerHTML = 'Next ' + icon('chevron-right', 16);
+  document.getElementById('protectedNote').innerHTML = icon('lock', 14) + ' Protected content · download and print disabled';
   await loadLibrary();
 }
 
-async function refreshCartBadge() {
-  const r = await apiGet('/cart/list.php');
-  const badge = document.getElementById('cartBadge');
-  if (r.success && r.items.length) { badge.style.display = 'inline-block'; badge.textContent = r.items.length; }
-  else badge.style.display = 'none';
-}
+const live = (m) => subIsActive(m);
 
 function libCard(m) {
-  const live = subIsActive(m) ? 'active' : 'expired';
-  m = Object.assign({}, m, { status: live });
-  const tagClass = live === 'active' ? 'tag-active' : 'tag-expired';
-  const cover = m.cover_image ? `<img src="${SUPABASE_PUBLIC_URL}${m.cover_image}" alt="">` : m.title;
+  const active = live(m);
+  const cover = m.cover_image ? `<img src="${SUPABASE_PUBLIC_URL}${esc(m.cover_image)}" alt="" loading="lazy">` : esc(m.title);
   return `
     <div class="mcard">
-      <div class="cover" onclick="openReader(${m.material_id})" style="cursor:pointer;">${cover}</div>
-      <div class="body">
-        <div class="title">${m.title}
-          <button type="button" title="Subscription details" aria-label="Subscription details"
-                  onclick='showSubInfo(${JSON.stringify({t: m.title, s: m.start_date, e: m.expiry_date, n: m.semester_count, st: m.status}).replace(/'/g, "&#39;")})'
-                  style="border:none; background:#e8eefc; color:var(--navy); width:22px; height:22px; border-radius:50%; font-weight:800; font-size:.8rem; cursor:pointer; margin-left:6px; vertical-align:middle;">i</button>
-        </div>
-        <div class="meta">${m.material_code} • Renewed ${m.semester_count}x</div>
-        <span class="tag ${tagClass}">${m.status}</span>
-        <div class="progress-bar" style="margin-top:6px;"><div style="width:${m.percent_complete}%;"></div></div>
-        <div class="meta">${m.percent_complete}% complete • ${durationText(m.expiry_date)}</div>
+      <div class="mcard-cover" ${active ? `onclick="openReader(${m.material_id})" style="cursor:pointer;"` : ''}>
+        ${badge(active ? 'success' : 'danger', active ? 'Active' : 'Expired')}${cover}
       </div>
-      <div class="actions">
-        <button class="btn btn-primary btn-sm" style="flex:1;" onclick="openReader(${m.material_id})" ${m.status !== 'active' ? 'disabled' : ''}>
-          ${m.status === 'active' ? 'Continue Reading' : 'Access Expired'}
-        </button>
+      <div class="mcard-body">
+        <div class="row-gap" style="justify-content:space-between; flex-wrap:nowrap;">
+          <div class="mcard-title">${esc(m.title)}</div>
+          <button type="button" class="iconbtn" style="width:30px; height:30px;" title="Subscription details" aria-label="Subscription details" onclick="showSubInfo(${m.material_id})">${icon('info', 18)}</button>
+        </div>
+        <div class="mcard-meta">${esc(m.subject_code || m.material_code)} · Renewed ${m.semester_count}x</div>
+        <div class="progress"><span style="width:${Number(m.percent_complete) || 0}%;"></span></div>
+        <div class="mcard-meta">${Math.round(m.percent_complete) || 0}% complete · ${active ? durationText(m.expiry_date) : 'Expired ' + fmtDate(m.expiry_date)}</div>
+        <div class="mcard-actions" style="margin-top:auto; padding-top:6px;">
+          ${active
+            ? `<button class="btn btn-primary btn-sm btn-block" onclick="openReader(${m.material_id})">Continue reading</button>`
+            : `<button class="btn btn-outline btn-sm btn-block" disabled>Access expired</button>`}
+        </div>
       </div>
     </div>`;
+}
+
+function render() {
+  const a = library.filter(live).length;
+  document.getElementById('cAll').textContent = ` ${library.length}`;
+  document.getElementById('cActive').textContent = ` ${a}`;
+  document.getElementById('cExpired').textContent = ` ${library.length - a}`;
+  const list = tab === 'active' ? library.filter(live) : tab === 'expired' ? library.filter(m => !live(m)) : library;
+  const grid = document.getElementById('grid');
+  if (!library.length) {
+    grid.innerHTML = `<div class="empty-state"><p style="font-weight:600; color:var(--slate-900);">Your Library is empty.</p>
+      <p style="margin:4px 0 14px;">Subscribe to materials from the Store and they will appear here once your receipt is approved.</p>
+      <a class="btn btn-primary" href="/student/store.html">Go to Store</a></div>`;
+    return;
+  }
+  grid.innerHTML = list.length ? list.map(libCard).join('') : `<div class="empty-state">Nothing here yet.</div>`;
 }
 
 async function loadLibrary() {
   const r = await apiGet('/subscription/library.php');
-  const grid = document.getElementById('grid');
-  if (!r.success) { grid.innerHTML = `<div class="empty-state">${r.message}</div>`; return; }
-  if (!r.library.length) {
-    grid.innerHTML = `<div class="empty-state">
-      <p>Your Library is empty.</p>
-      <p class="muted">Subscribe to materials from the Store and they will appear here once your receipt is approved.</p>
-      <a class="btn btn-primary" href="/student/store.html" style="margin-top:10px; display:inline-flex;">Go to Store</a>
-    </div>`;
-    return;
-  }
-  grid.innerHTML = r.library.map(libCard).join('');
+  if (!r.success) { document.getElementById('grid').innerHTML = `<div class="empty-state">${esc(r.message)}</div>`; return; }
+  library = r.library;
+  render();
+}
+document.getElementById('tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  tab = b.dataset.tab;
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('active', x === b));
+  render();
+});
+
+/* ---------- subscription details (the info button) ---------- */
+function showSubInfo(materialId) {
+  const m = library.find(x => x.material_id === materialId); if (!m) return;
+  const active = live(m);
+  openModal(`
+    ${modalHead('Subscription details', esc(m.title) + (m.author_name ? ' · ' + esc(m.author_name) : ''))}
+    <table class="kv-table" style="min-width:0;">
+      <tr><td>Status</td><td>${badge(active ? 'success' : 'danger', active ? 'Active' : 'Expired')}</td></tr>
+      <tr><td>Subscribed on</td><td><b>${fmtDate(m.start_date)}</b></td></tr>
+      <tr><td>Expires on</td><td><b>${fmtDate(m.expiry_date)}</b> <span class="muted">(${durationText(m.expiry_date)})</span></td></tr>
+      <tr><td>Times renewed</td><td>${m.semester_count} (3 months each)</td></tr>
+      <tr><td>Reading progress</td><td>${Math.round(m.percent_complete) || 0}%</td></tr>
+      <tr><td>Last opened</td><td>${m.last_opened ? fmtDate(m.last_opened) : 'Not opened yet'}</td></tr>
+      <tr><td>Billing code</td><td>${esc(m.billing_code || '—')}</td></tr>
+    </table>
+    <button class="btn btn-primary btn-block" style="margin-top:16px;" onclick="closeModal()">Close</button>`);
 }
 
+/* ---------- reader ---------- */
 async function openReader(materialId) {
+  const item = library.find(x => x.material_id === materialId);
+  if (item && !live(item)) { toast('Your access to this material has expired.', 'error'); return; }
   const r = await apiGet(`/materials/get.php?id=${materialId}`);
   if (!r.success) { toast(r.message, 'error'); return; }
   const m = r.material;
-  renderReader(m, m.accessible_pages[0] || 1);
+  const start = (item && item.last_page_read > 0 && item.last_page_read <= m.total_pages) ? item.last_page_read : (m.accessible_pages[0] || 1);
+  reading = { m, page: start, percent: item ? Math.round(item.percent_complete) || 0 : 0 };
+  document.getElementById('readerTitle').textContent = m.title;
+  document.getElementById('reader').classList.add('open');
+  showPage();
 }
-
-function renderReader(m, page) {
-  document.getElementById('modalContent').innerHTML = `
-    <h2>${m.title}</h2>
-    <div class="protected" style="border:1px solid #e5e7eb; border-radius:8px; padding:8px; text-align:center;">
-      <img class="viewer-page-img protected" src="/api/materials/view_page.php?material_id=${m.id}&page=${page}">
-    </div>
-    <div class="viewer-toolbar">
-      <button class="btn btn-outline btn-sm" onclick="renderReader(${JSON.stringify(m).replace(/"/g,'&quot;')}, ${page - 1})" ${page <= 1 ? 'disabled' : ''}>&larr; Prev</button>
-      <span class="muted">Page ${page} of ${m.total_pages}</span>
-      <button class="btn btn-outline btn-sm" onclick="renderReader(${JSON.stringify(m).replace(/"/g,'&quot;')}, ${page + 1})" ${page >= m.total_pages ? 'disabled' : ''}>Next &rarr;</button>
-    </div>
-    <button class="btn btn-primary btn-block" style="margin-top:14px;" onclick="closeModal(); loadLibrary();">Close</button>
-  `;
-  document.getElementById('modalBackdrop').style.display = 'flex';
+function showPage() {
+  const { m, page, percent } = reading;
+  document.getElementById('readerStage').innerHTML = `<img class="viewer-page-img protected" alt="Page ${page}" src="/api/materials/view_page.php?material_id=${m.id}&page=${page}">`;
+  document.getElementById('readerPage').textContent = `Page ${page} of ${m.total_pages}`;
+  document.getElementById('readerProgress').textContent = `${percent}% complete`;
+  document.getElementById('prevBtn').disabled = page <= 1;
+  document.getElementById('nextBtn').disabled = page >= m.total_pages;
 }
-
-function showSubInfo(i) {
-  const active = i.st === 'active' && daysLeft(i.e) >= 0;
-  document.getElementById('modalContent').innerHTML = `
-    <h2>Subscription details</h2>
-    <p style="font-weight:700; margin-top:0;">${i.t}</p>
-    <table style="min-width:0;">
-      <tr><td class="muted">Status</td><td><span class="tag ${active ? 'tag-active' : 'tag-expired'}">${active ? 'active' : 'expired'}</span></td></tr>
-      <tr><td class="muted">Subscribed on</td><td>${i.s}</td></tr>
-      <tr><td class="muted">Access until</td><td><b>${i.e}</b></td></tr>
-      <tr><td class="muted">Time remaining</td><td><b>${durationText(i.e)}</b></td></tr>
-      <tr><td class="muted">Semesters purchased</td><td>${i.n} (3 months each)</td></tr>
-    </table>
-    <button class="btn btn-primary btn-block" style="margin-top:14px;" onclick="closeModal()">Close</button>`;
-  document.getElementById('modalBackdrop').style.display = 'flex';
+document.getElementById('prevBtn').addEventListener('click', () => { if (reading.page > 1) { reading.page--; showPage(); } });
+document.getElementById('nextBtn').addEventListener('click', () => { if (reading.page < reading.m.total_pages) { reading.page++; showPage(); } });
+function closeReader() {
+  document.getElementById('reader').classList.remove('open');
+  document.getElementById('readerStage').innerHTML = '';
+  reading = null;
+  loadLibrary();
 }
-
-function closeModal() { document.getElementById('modalBackdrop').style.display = 'none'; }
 
 init();
 </script>
