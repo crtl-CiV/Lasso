@@ -34,7 +34,6 @@ if (isset($in['semesters'])) {
 if (isset($in['department_id'])) { $fields[] = "department_id = ?"; $params[] = (int)$in['department_id'] ?: null; }
 if (isset($in['program_id'])) { $fields[] = "program_id = ?"; $params[] = (int)$in['program_id'] ?: null; }
 if (isset($in['non_body_pages'])) { $fields[] = "non_body_pages = ?"; $params[] = json_encode($in['non_body_pages']); }
-if (isset($in['preview_excluded_pages'])) { $fields[] = "preview_excluded_pages = ?"; $params[] = json_encode($in['preview_excluded_pages']); }
 if (isset($in['author_name']) && trim($in['author_name']) !== '') {
     $authorName = trim($in['author_name']);
     $stmt2 = $db->prepare("SELECT id FROM authors WHERE name = ?");

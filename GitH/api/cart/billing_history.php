@@ -4,7 +4,7 @@ $user = requireStudent();
 $db = getDB();
 
 $stmt = $db->prepare("SELECT b.id, b.billing_code, b.total_amount, b.semester, b.academic_year, b.status, b.created_at,
-                              b.receipt_status, b.receipt_number, b.receipt_note
+                              b.receipt_status, b.receipt_number, b.receipt_note, (b.receipt_photo IS NOT NULL) AS has_receipt
                        FROM billing_statements b
                        WHERE b.student_id = ?
                        ORDER BY b.created_at DESC");

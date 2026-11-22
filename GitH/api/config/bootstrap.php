@@ -136,3 +136,18 @@ function eligibilityBits(PDO $db, int $studentId): array {
 function materialOpenTo(array $m, array $bits): bool {
     return (((int)$m['year_mask'] & $bits['ybit']) !== 0) && (((int)$m['semester_mask'] & $bits['sbit']) !== 0);
 }
+
+// ---------- Password rules (registration, reset, change, new admins) ----------
+/** Returns what is missing from the password, or null when it meets every rule. */
+function passwordProblem(string $pw): ?string {
+    $missing = [];
+    if (strlen($pw) < 8) $missing[] = 'at least 8 characters';
+    if (!preg_match('/[0-9]/', $pw)) $missing[] = '1 number';
+    if (!preg_match('/[A-Z]/', $pw)) $missing[] = '1 capital letter';
+    if (!preg_match('/[^A-Za-z0-9]/', $pw)) $missing[] = '1 special character';
+    return $missing ? 'Password needs ' . implode(', ', $missing) . '.' : null;
+}
+
+const ADMIN_POSITIONS = ['Head Administrator', 'Administrator', 'Cashier', 'Accounting Staff', 'IM Coordinator', 'Faculty', 'Staff'];
+
+const SCHOOL_EMAIL_DOMAIN = '@students.isatu.edu.ph';

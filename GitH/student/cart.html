@@ -71,42 +71,74 @@ async function loadPending() {
       <h2>Payments &amp; receipts</h2>
       <p class="muted" style="margin:4px 0 6px;">Pay at the school cashier for each billing, then submit the official receipt (OR). An administrator will validate it and unlock your materials.</p>
       ${r.pending_billings.map(b => {
-        let status, form = '';
+        const code = esc(b.billing_code);
+        let status, form = '', actions = '';
         if (b.receipt_status === 'submitted') {
-          status = `<div class="alert alert-info">Receipt (OR ${esc(b.receipt_number)}) submitted — waiting for administrator review.</div>`;
+          status = `<div class="alert alert-info">Receipt submitted${b.receipt_submitted_at ? ' on ' + fmtDate(b.receipt_submitted_at) : ''} — waiting for administrator review.</div>`;
+          actions = `<button class="btn btn-outline btn-sm" onclick="viewReceipt('${code}')">${icon('eye', 16)} View my receipt</button>`;
         } else {
           status = b.receipt_status === 'rejected'
             ? `<div class="alert alert-error">Your receipt was rejected${b.receipt_note ? ': ' + esc(b.receipt_note) + '.' : '.'} Please submit it again.</div>`
             : `<p class="muted" style="margin:6px 0;">Waiting for your receipt.</p>`;
           form = `
-            <form class="rcpForm" data-code="${esc(b.billing_code)}">
-              <div class="form-row">
-                <div><label>OR number</label><input type="text" name="receipt_number" required placeholder="Number printed on your receipt"></div>
-                <div><label>Receipt photo</label>${dropzoneHtml('receipt_photo', 'Click to upload', 'Clear photo of the whole receipt')}</div>
-              </div>
+            <form class="rcpForm" data-code="${code}" data-total="${esc(b.total_amount)}">
+              <label>Receipt photo</label>${dropzoneHtml('receipt_photo', 'Click to upload', 'Clear photo of the whole official receipt')}
               <button class="btn btn-primary btn-sm" style="margin-top:12px;" type="submit">Submit receipt</button>
             </form>`;
+          actions = (b.has_receipt ? `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${code}')">${icon('eye', 16)} View rejected receipt</button>` : '')
+            + `<button class="btn btn-ghost btn-sm" style="color:var(--red-600);" onclick="cancelBilling('${code}')">Cancel billing</button>`;
         }
         return `
           <div class="rcpBlock" style="border-top:1px solid var(--slate-200); margin-top:14px; padding-top:14px;">
-            <div class="row-gap" style="justify-content:space-between;"><b>Billing #${esc(b.billing_code)}</b><b>${peso(b.total_amount)}</b></div>
-            ${status}${form}<div class="rcpMsg"></div>
+            <div class="row-gap" style="justify-content:space-between;"><b>Billing #${code}</b><b>${peso(b.total_amount)}</b></div>
+            ${status}${form}<div class="row-gap" style="margin-top:10px; flex-wrap:wrap;">${actions}</div><div class="rcpMsg"></div>
           </div>`;
       }).join('')}
     </div>`;
   bindDropzones(box);
-  box.querySelectorAll('.rcpForm').forEach(f => f.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const fd = new FormData(f); fd.append('billing_code', f.dataset.code);
-    const btn = f.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Submitting…';
-    const res = await fetch('/api/cart/submit_receipt.php', { method: 'POST', body: fd, credentials: 'same-origin' });
-    const out = await res.json();
+  box.querySelectorAll('.rcpForm').forEach(f => f.addEventListener('submit', (e) => { e.preventDefault(); confirmReceipt(f); }));
+}
+
+/** Step 2 of submitting: show the chosen photo large and ask the student to confirm it's the right receipt. */
+function confirmReceipt(f) {
+  const file = f.querySelector('input[name=receipt_photo]').files[0];
+  const msg = f.closest('.rcpBlock').querySelector('.rcpMsg');
+  if (!file) { msg.innerHTML = '<div class="alert alert-error">Please choose a photo of your official receipt first.</div>'; return; }
+  msg.innerHTML = '';
+  const url = URL.createObjectURL(file);
+  openModal(`${modalHead('Is this the right receipt?', `For billing <b>${esc(f.dataset.code)}</b> · ${peso(f.dataset.total)}`)}
+    <img class="receipt-big" src="${url}" alt="The receipt photo you chose">
+    <p class="muted small" style="margin-top:10px;">Make sure the whole receipt is visible and the OR number and amount can be read. Once submitted, you can't send another receipt for this billing until it is reviewed.</p>
+    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Choose another</button>
+      <button class="btn btn-primary" id="rcpConfirmBtn">Yes, submit</button></div>`, { wide: 640 });
+  document.getElementById('rcpConfirmBtn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget; if (btn.disabled) return;
+    btn.disabled = true; btn.textContent = 'Submitting…';
+    const fd = new FormData(); fd.append('billing_code', f.dataset.code); fd.append('receipt_photo', file);
+    const out = await fetch('/api/cart/submit_receipt.php', { method: 'POST', body: fd, credentials: 'same-origin' }).then(x => x.json()).catch(() => ({ success: false, message: 'Network error. Please try again.' }));
+    closeModal(); URL.revokeObjectURL(url);
     if (out.success) { toast(out.message, 'success'); loadPending(); loadHistory(); }
-    else {
-      btn.disabled = false; btn.textContent = 'Submit receipt';
-      f.closest('.rcpBlock').querySelector('.rcpMsg').innerHTML = `<div class="alert alert-error">${esc(out.message)}</div>`;
-    }
-  }));
+    else { msg.innerHTML = `<div class="alert alert-error">${esc(out.message)}</div>`; loadPending(); }
+  });
+}
+
+function viewReceipt(code) {
+  openModal(`${modalHead('Your submitted receipt', `Billing ${esc(code)}`)}
+    <img class="receipt-big" src="/api/cart/receipt_photo.php?code=${encodeURIComponent(code)}&t=${Date.now()}" alt="Receipt photo for billing ${esc(code)}">
+    <div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">Close</button></div>`, { wide: 640 });
+}
+
+function cancelBilling(code) {
+  openModal(`${modalHead('Cancel this billing?', `Billing ${esc(code)}`)}
+    <p>Only cancel if you have <b>not paid</b> for it yet. Its materials go back to your cart so you can check out again.</p>
+    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Keep billing</button>
+      <button class="btn btn-danger" id="cancelBillBtn">Cancel billing</button></div>`);
+  document.getElementById('cancelBillBtn').addEventListener('click', async (e) => {
+    e.currentTarget.disabled = true;
+    const r = await apiPost('/cart/cancel_billing.php', { billing_code: code });
+    closeModal(); toast(r.message, r.success ? 'success' : 'error');
+    if (r.success) { loadPending(); loadCart(); loadHistory(); }
+  });
 }
 
 /* ---------- cart ---------- */
@@ -199,7 +231,7 @@ function renderHistory() {
       <td>${esc(b.semester)}, AY ${esc(b.academic_year)}</td>
       <td>${peso(b.total_amount)}</td>
       <td>${st}</td>
-      <td class="text-right"><button class="btn btn-ghost btn-sm" onclick="printBilling(${idx})">${icon('print', 16)} Print</button></td>
+      <td class="text-right">${b.has_receipt ? `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${esc(b.billing_code)}')">${icon('eye', 16)} Receipt</button>` : ''}<button class="btn btn-ghost btn-sm" onclick="printBilling(${idx})">${icon('print', 16)} Print</button></td>
     </tr>`;
   }).join('');
   const more = historyCache.length - HISTORY_LIMIT;

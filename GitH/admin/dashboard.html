@@ -46,7 +46,7 @@
       <div class="card-head"><h2>Awaiting receipt review</h2><a href="/admin/sales.html" class="link-btn">View all</a></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Billing</th><th>Student</th><th>Amount</th><th>OR no.</th><th>Submitted</th><th></th></tr></thead>
+          <thead><tr><th>Billing</th><th>Student</th><th>Amount</th><th>Submitted</th><th></th></tr></thead>
           <tbody id="awaitingBody"></tbody>
         </table>
       </div>
@@ -91,10 +91,9 @@ async function init() {
       <td><b>${esc(b.billing_code)}</b></td>
       <td><div class="person"><span class="avatar">${esc(initials(b.full_name))}</span><div class="stack"><span class="name">${esc(b.full_name)}</span><span class="muted small">${esc(b.student_id_number)}</span></div></div></td>
       <td>${peso(b.total_amount)}</td>
-      <td>${esc(b.receipt_number || '—')}</td>
       <td>${fmtDate(b.receipt_submitted_at)}</td>
       <td class="text-right"><a class="btn btn-primary btn-sm" href="/admin/sales.html?review=${encodeURIComponent(b.billing_code)}">Review</a></td>
-    </tr>`).join('') : '<tr><td colspan="6" class="muted">No receipts are waiting for review.</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="5" class="muted">No receipts are waiting for review.</td></tr>';
   loadReminders();
 }
 

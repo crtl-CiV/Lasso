@@ -11,6 +11,7 @@ $in = jsonInput();
 $billingCode = trim($in['billing_code'] ?? '');
 $action = $in['action'] ?? 'approve';
 $note = trim($in['note'] ?? '');
+$orNumber = trim((string)($in['receipt_number'] ?? ''));
 if (!$billingCode) respond(false, 'Billing code is required.', 422);
 if (!in_array($action, ['approve', 'reject'], true)) respond(false, 'Invalid action.', 422);
 
@@ -34,6 +35,16 @@ if ($action === 'reject') {
     $mailed = emailReceiptRejected($b['university_email'], $b['full_name'], $b['billing_code'], (string)$b['receipt_number'], $note);
     respond(true, ['message' => 'Receipt rejected. The student can submit a corrected one.' . ($mailed ? ' They were notified by email.' : ' (The email notification could not be sent.)'), 'email_sent' => $mailed]);
 }
+
+// ---- approve: the admin types the OR number read from the photo; each OR backs one billing only ----
+if (strlen($orNumber) < 3 || strlen($orNumber) > 60) respond(false, 'Type the OR number printed on the receipt photo.', 422);
+$st = $db->prepare("SELECT b.billing_code, s.full_name FROM billing_statements b JOIN students s ON s.id = b.student_id
+                     WHERE LOWER(b.receipt_number) = LOWER(?) AND b.id <> ?");
+$st->execute([$orNumber, $b['id']]);
+if ($used = $st->fetch()) {
+    respond(false, "OR {$orNumber} was already used on {$used['billing_code']} ({$used['full_name']}). Check the photo, or reject this receipt as a duplicate.", 409);
+}
+$b['receipt_number'] = $orNumber;
 
 // ---- approve: activate (or extend) a 3-month subscription per material ----
 $stmt = $db->prepare("SELECT bi.material_id, m.title FROM billing_statement_items bi
@@ -64,8 +75,8 @@ try {
         }
     }
     $db->prepare("UPDATE billing_statements SET status = 'paid', receipt_status = 'approved', receipt_note = NULL,
-                         confirmed_by = ?, confirmed_at = NOW() WHERE id = ?")
-       ->execute([$admin['id'], $b['id']]);
+                         receipt_number = ?, confirmed_by = ?, confirmed_at = NOW() WHERE id = ?")
+       ->execute([$orNumber, $admin['id'], $b['id']]);
     $db->commit();
 } catch (Throwable $e) {
     $db->rollBack();

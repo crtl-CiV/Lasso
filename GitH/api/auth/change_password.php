@@ -6,7 +6,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(false, 'Invalid request metho
 $in = jsonInput();
 $current = (string)($in['current_password'] ?? '');
 $new = (string)($in['new_password'] ?? '');
-if (strlen($new) < 8) respond(false, 'New password must be at least 8 characters.', 422);
+if ($problem = passwordProblem($new)) respond(false, $problem, 422);
 
 $db = getDB();
 $role = $_SESSION['user']['role'];

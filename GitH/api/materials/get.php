@@ -26,7 +26,6 @@ if (!$subscribed && !materialOpenTo($m, eligibilityBits($db, (int)$user['id'])))
 }
 
 $nonBody = json_decode($m['non_body_pages'] ?? '[]', true) ?: [];
-$excludedFromPreview = json_decode($m['preview_excluded_pages'] ?? '[]', true) ?: [];
 
 // Build the ordered list of body pages (i.e. pages that count toward progress/preview)
 $bodyPages = [];
@@ -37,9 +36,8 @@ for ($p = 1; $p <= (int)$m['total_pages']; $p++) {
 if ($subscribed) {
     $accessiblePages = range(1, (int)$m['total_pages']);
 } else {
-    // Limited preview: first 5 body pages, minus any admin-excluded pages
-    $previewBody = array_values(array_diff($bodyPages, $excludedFromPreview));
-    $accessiblePages = array_slice($previewBody, 0, 5);
+    // Limited preview: the first 5 body pages (non-body pages such as the cover, TOC or answer keys are never previewed)
+    $accessiblePages = array_slice($bodyPages, 0, 5);
 }
 
 unset($m['file_path'], $m['non_body_pages'], $m['preview_excluded_pages']);

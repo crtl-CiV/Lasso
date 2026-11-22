@@ -42,6 +42,8 @@
 <script src="/assets/js/api.js"></script>
 <script src="/assets/js/ui.js"></script>
 <script>
+// Same list the server accepts (bootstrap.php ADMIN_POSITIONS)
+const ADMIN_POSITIONS = ['Head Administrator', 'Administrator', 'Cashier', 'Accounting Staff', 'IM Coordinator', 'Faculty', 'Staff'];
 let tab = 'students', students = [], admins = [], requests = [];
 const subsData = {};
 
@@ -225,9 +227,10 @@ function openNewAdminModal() {
       </div>
       <label>Email</label><input type="email" id="na_email" required placeholder="name@example.com">
       <div class="form-row">
-        <div><label>Position</label><input type="text" id="na_position" required></div>
-        <div><label>Password</label><input type="password" id="na_password" minlength="8" required></div>
+        <div><label>Position</label><select id="na_position" required><option value="">Select position</option>${ADMIN_POSITIONS.map(p => `<option>${p}</option>`).join('')}</select></div>
+        <div><label>Password</label><input type="password" id="na_password" required autocomplete="new-password"></div>
       </div>
+      <ul data-pw-rules-for="na_password"></ul>
       <div id="naAlert"></div>
       <div style="display:flex; gap:10px; margin-top:18px;">
         <button type="button" class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancel</button>
@@ -236,9 +239,12 @@ function openNewAdminModal() {
     </form>`);
   document.getElementById('newAdminForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!passwordOk(document.getElementById('na_password').value)) {
+      document.getElementById('naAlert').innerHTML = '<div class="alert alert-error">The password does not meet all the requirements yet.</div>'; return;
+    }
     const r = await apiPost('/admin/register_admin.php', {
       admin_id: document.getElementById('na_id').value.trim(), email: document.getElementById('na_email').value.trim(),
-      full_name: document.getElementById('na_name').value.trim(), position: document.getElementById('na_position').value.trim(),
+      full_name: document.getElementById('na_name').value.trim(), position: document.getElementById('na_position').value,
       password: document.getElementById('na_password').value,
     });
     if (r.success) {

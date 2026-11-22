@@ -109,14 +109,20 @@ async function addToCart(e, id) {
   else toast(r.message, 'error');
 }
 
+let previewMaterial = null;
+function openPreview() {
+  const m = previewMaterial; if (!m) return;
+  closeModal();
+  openPageReader({
+    material: m, pages: m.accessible_pages, track: false, preview: !m.is_subscribed, backLabel: 'Back to Store',
+    footer: m.is_subscribed ? '' : `<div class="reader-end">End of the free preview. <button class="btn btn-primary btn-sm" onclick="closePageReader(); addToCartAndClose(${m.id})">Add to cart</button></div>`,
+  });
+}
+
 async function openMaterial(id) {
   const r = await apiGet(`/materials/get.php?id=${id}`);
   if (!r.success) { toast(r.message, 'error'); return; }
-  const m = r.material;
-  const pagesHtml = m.accessible_pages.map(p =>
-    `<img class="viewer-page-img protected" loading="lazy" src="/api/materials/view_page.php?material_id=${m.id}&page=${p}" style="margin-bottom:8px;">`
-  ).join('');
-
+  const m = r.material; previewMaterial = m;
   openModal(`
     ${modalHead(esc(m.title), `${esc(m.author_name || 'Unknown author')} · ${esc(m.subject_code || m.material_code)}`)}
     <div class="tags" style="margin-bottom:12px;"><span class="badge badge-info">${esc(yearMaskLabel(m.year_mask))}</span><span class="badge badge-warning">${esc(semesterMaskLabel(m.semester_mask))}</span></div>
@@ -126,9 +132,9 @@ async function openMaterial(id) {
     ${m.is_subscribed
       ? '<div class="alert alert-success">You are subscribed to this material.</div>'
       : `<div class="alert alert-info">Limited preview: ${m.accessible_pages.length} of ${m.body_page_count} body pages shown. Subscribe for full access.</div>`}
-    <div class="protected" style="max-height:46vh; overflow:auto; border:1px solid var(--slate-200); border-radius:12px; padding:8px; background:var(--slate-50);">
-      ${pagesHtml || '<p class="muted" style="padding:12px;">No preview pages available yet.</p>'}
-    </div>
+    ${m.accessible_pages.length
+      ? `<button class="btn btn-outline btn-block" onclick="openPreview()">${icon('eye', 16)} ${m.is_subscribed ? 'Open material' : `Read the preview (${m.accessible_pages.length} page${m.accessible_pages.length === 1 ? '' : 's'})`}</button>`
+      : '<p class="muted">No preview pages available yet.</p>'}
     <div style="display:flex; gap:10px; margin-top:16px;">
       <button class="btn btn-outline" style="flex:1;" onclick="closeModal()">Close</button>
       ${!m.is_subscribed ? `<button class="btn btn-primary" style="flex:1;" onclick="addToCartAndClose(${m.id})">Add to cart</button>` : ''}

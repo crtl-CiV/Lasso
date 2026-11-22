@@ -5,7 +5,7 @@ $db = getDB();
 
 // Billings still waiting for access (not yet approved by an admin)
 $stmt = $db->prepare("SELECT id, billing_code, total_amount, status AS billing_status, receipt_status,
-                              receipt_number, receipt_note, created_at
+                              receipt_number, receipt_note, receipt_submitted_at, (receipt_photo IS NOT NULL) AS has_receipt, created_at
                        FROM billing_statements
                        WHERE student_id = ? AND status = 'pending'
                        ORDER BY created_at DESC");

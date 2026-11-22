@@ -9,126 +9,263 @@
 <body class="reg">
 <div class="reg-top">
   <a class="brand" href="/index.html"><span class="brand-mark">L</span>LASSO</a>
-  <span class="muted">Already registered? <a href="/index.html"><b>Log in</b></a></span>
+  <div class="row-gap"><span class="muted">Already registered? <a href="/index.html"><b>Log in</b></a></span></div>
 </div>
 
 <div class="reg-card">
   <h1>Create your account</h1>
   <p class="page-sub">Register with your official <b>@students.isatu.edu.ph</b> email. An administrator checks your ID before you can use the store.</p>
+
+  <ol class="crumbs" id="crumbs" aria-label="Registration steps">
+    <li data-step="1"><span class="step-no">1</span><span class="crumb-lbl">Email</span></li>
+    <li data-step="2"><span class="step-no">2</span><span class="crumb-lbl">Verify code</span></li>
+    <li data-step="3"><span class="step-no">3</span><span class="crumb-lbl">Your details</span></li>
+    <li data-step="4"><span class="step-no">4</span><span class="crumb-lbl">ID photos</span></li>
+    <li data-step="5"><span class="step-no">5</span><span class="crumb-lbl">Password</span></li>
+    <li data-step="6"><span class="step-no">6</span><span class="crumb-lbl">Review</span></li>
+  </ol>
   <div id="alertBox"></div>
 
-  <form id="regForm">
-    <div class="reg-section">
-      <h2><span class="step-no">1</span> Account</h2>
-      <div class="form-row">
-        <div><label for="student_id_number">Student ID number</label><input type="text" id="student_id_number" required placeholder="e.g. 2023-00123"></div>
-        <div><label for="full_name">Full name</label><input type="text" id="full_name" required placeholder="Juan Dela Cruz"></div>
-      </div>
-      <label for="university_email">University email</label>
-      <input type="email" id="university_email" required placeholder="name@students.isatu.edu.ph">
-      <div class="form-row">
-        <div><label for="password">Password</label><input type="password" id="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></div>
-        <div><label for="password_confirm">Confirm password</label><input type="password" id="password_confirm" required minlength="8" autocomplete="new-password" placeholder="Type it again"></div>
-      </div>
-      <div class="field-hint">Type your password twice. Both entries must match.</div>
-    </div>
+  <!-- Step 1: school email -->
+  <section class="reg-step" data-step="1">
+    <h2>Your school email</h2>
+    <p class="muted">Enter your official school email. We'll send a 6-digit code to it in the next step.</p>
+    <label for="university_email">School email</label>
+    <input type="email" id="university_email" required placeholder="name@students.isatu.edu.ph" autocomplete="email">
+    <div class="alert alert-success" id="verifiedNote" hidden style="margin-top:16px;"></div>
+  </section>
 
-    <div class="reg-section">
-      <h2><span class="step-no">2</span> Academic details</h2>
-      <div class="form-row">
-        <div><label for="department_id">College department</label><select id="department_id" required></select></div>
-        <div><label for="program_id">Course</label><select id="program_id" required></select></div>
-      </div>
-      <div class="form-row">
-        <div><label for="year_level">Year level</label>
-          <select id="year_level" required>
-            <option value="">Select year level</option>
-            <option>1st Year</option><option>2nd Year</option><option>3rd Year</option><option>4th Year</option><option>5th Year</option>
-          </select></div>
-        <div><label for="section">Section</label><input type="text" id="section" required placeholder="e.g. 3B"></div>
-      </div>
-    </div>
+  <!-- Step 2: type the emailed code -->
+  <section class="reg-step" data-step="2" hidden>
+    <h2>Enter the verification code</h2>
+    <p class="muted">We sent a 6-digit code to <b id="sentTo"></b>. It expires in 10 minutes. Can't find it? Check your Spam folder.</p>
+    <label for="verify_code">6-digit code</label>
+    <input type="text" id="verify_code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:6px; font-size:20px; font-weight:600; max-width:220px;">
+    <p class="small" style="margin-top:12px;"><button type="button" class="link-btn" id="resendBtn" onclick="sendCode(true)">Resend code</button> · <button type="button" class="link-btn" onclick="go(1)">Use a different email</button></p>
+  </section>
 
-    <div class="reg-section">
-      <h2><span class="step-no">3</span> Student ID verification</h2>
-      <p class="muted" style="margin-bottom:12px;">Upload clear photos of your school ID, front and back, validated for this school year.</p>
-      <div class="form-row">
-        <div id="dzFront"></div>
-        <div id="dzBack"></div>
-      </div>
+  <!-- Step 3: who they are -->
+  <section class="reg-step" data-step="3" hidden>
+    <h2>Your details</h2>
+    <div class="form-row">
+      <div><label for="full_name">Full name</label><input type="text" id="full_name" required placeholder="Juan Dela Cruz"></div>
+      <div><label for="student_id_number">Student ID number</label><input type="text" id="student_id_number" required placeholder="e.g. 2023-00123"></div>
     </div>
+    <div class="form-row">
+      <div><label for="department_id">College department</label><select id="department_id" required></select></div>
+      <div><label for="program_id">Course</label><select id="program_id" required></select></div>
+    </div>
+    <div class="form-row">
+      <div><label for="year_level">Year level</label>
+        <select id="year_level" required>
+          <option value="">Select year level</option>
+          <option>1st Year</option><option>2nd Year</option><option>3rd Year</option><option>4th Year</option><option>5th Year</option>
+        </select></div>
+      <div><label for="section">Section</label><input type="text" id="section" required placeholder="e.g. 3B"></div>
+    </div>
+  </section>
 
-    <button class="btn btn-primary btn-block" style="margin-top:28px; padding:13px;" type="submit" id="regBtn">Create account</button>
-  </form>
+  <!-- Step 4: ID photos -->
+  <section class="reg-step" data-step="4" hidden>
+    <h2>Student ID photos</h2>
+    <p class="muted" style="margin-bottom:12px;">Upload clear photos of your school ID, front and back, validated for this school year. Check the previews before continuing.</p>
+    <div class="form-row">
+      <div id="dzFront"></div>
+      <div id="dzBack"></div>
+    </div>
+  </section>
+
+  <!-- Step 5: password -->
+  <section class="reg-step" data-step="5" hidden>
+    <h2>Create a password</h2>
+    <div class="form-row">
+      <div><label for="password">Password</label><input type="password" id="password" required autocomplete="new-password" placeholder="Create a password"></div>
+      <div><label for="password_confirm">Confirm password</label><input type="password" id="password_confirm" required autocomplete="new-password" placeholder="Type it again"></div>
+    </div>
+    <ul data-pw-rules-for="password"></ul>
+  </section>
+
+  <!-- Step 6: review -->
+  <section class="reg-step" data-step="6" hidden>
+    <h2>Review your details</h2>
+    <p class="muted">Check everything before creating your account.</p>
+    <div id="review" style="margin-top:12px;"></div>
+  </section>
+
+  <div class="reg-nav">
+    <button type="button" class="btn btn-outline" id="backBtn" onclick="go(step - 1)" hidden>Back</button>
+    <button type="button" class="btn btn-primary" id="nextBtn" onclick="next()">Send code</button>
+  </div>
 </div>
 
 <script src="/assets/js/api.js"></script>
 <script src="/assets/js/ui.js"></script>
 <script>
-let programs = [];
+let programs = [], departments = [], step = 1, verifiedEmail = null, cooldown = null;
+const $ = id => document.getElementById(id);
+const showAlert = (msg, type = 'error') => { $('alertBox').innerHTML = msg ? `<div class="alert alert-${type}">${esc(msg)}</div>` : ''; };
 
-document.getElementById('dzFront').innerHTML = dropzoneHtml('id_photo_front', 'ID photo — front', 'Click to choose or drag a file here');
-document.getElementById('dzBack').innerHTML = dropzoneHtml('id_photo_back', 'ID photo — back', 'Click to choose or drag a file here');
+$('dzFront').innerHTML = dropzoneHtml('id_photo_front', 'ID photo — front', 'Click to choose or drag a file here');
+$('dzBack').innerHTML = dropzoneHtml('id_photo_back', 'ID photo — back', 'Click to choose or drag a file here');
 bindDropzones();
 
 async function loadRefs() {
   const r = await apiGet('/reference_data.php');
   if (!r.success) return;
-  programs = r.programs;
-  const dep = document.getElementById('department_id');
+  programs = r.programs; departments = r.departments;
+  const dep = $('department_id');
   dep.innerHTML = '<option value="">Select department</option>' + r.departments.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
   dep.addEventListener('change', renderPrograms);
   renderPrograms();
 }
-
 function renderPrograms() {
-  const depId = document.getElementById('department_id').value;
-  const prog = document.getElementById('program_id');
+  const depId = $('department_id').value, prog = $('program_id');
   const filtered = programs.filter(p => String(p.department_id) === String(depId));
   prog.innerHTML = (filtered.length ? '<option value="">Select course</option>' : '<option value="">No courses set up for this department yet</option>') +
     filtered.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
 }
-
 loadRefs();
 
-document.getElementById('regForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const box = document.getElementById('alertBox'), btn = document.getElementById('regBtn');
-  box.innerHTML = '';
-  const pw = document.getElementById('password'), pw2 = document.getElementById('password_confirm');
-  pw2.classList.remove('is-error');
-  if (pw.value !== pw2.value) {
-    pw2.classList.add('is-error');
-    box.innerHTML = '<div class="alert alert-error">The two passwords do not match.</div>';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    return;
+/* ---------- step navigation ---------- */
+const LAST = 6;
+function go(n) {
+  if (n < 1 || n > LAST) return;
+  if (n === 2 && !codeSentTo && !verifiedEmail) return;   // no code sent yet
+  if (n > 2 && !verifiedEmail) return;                    // nothing past verification until the email is verified
+  if (n === 2 && verifiedEmail) n = 1;                    // already verified: step 2 has nothing left to do
+  step = n; showAlert('');
+  document.querySelectorAll('.reg-step').forEach(sec => sec.hidden = +sec.dataset.step !== n);
+  document.querySelectorAll('#crumbs li').forEach(li => {
+    const k = +li.dataset.step;
+    li.classList.toggle('active', k === n); li.classList.toggle('done', k < n);
+    if (k === n) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+  });
+  $('backBtn').hidden = n === 1;
+  $('nextBtn').textContent = n === 1 ? (verifiedEmail ? 'Next' : 'Send code') : n === 2 ? 'Verify' : n === LAST ? 'Create account' : 'Next';
+  if (n === LAST) renderReview();
+  const first = document.querySelector(`.reg-step[data-step="${n}"] input:not([type=file]):not([readonly]), .reg-step[data-step="${n}"] select`);
+  if (first) first.focus();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+// Completed steps in the breadcrumb can be clicked to go back
+document.querySelectorAll('#crumbs li').forEach(li => li.addEventListener('click', () => { if (li.classList.contains('done')) go(+li.dataset.step); }));
+
+/** Checks the required fields of a step; marks the first problem. */
+function stepValid(n) {
+  const fields = [...document.querySelectorAll(`.reg-step[data-step="${n}"] [required]`)];
+  for (const f of fields) {
+    f.classList.remove('is-error');
+    const empty = f.type === 'file' ? !f.files.length : !String(f.value).trim();
+    if (empty) {
+      if (f.type !== 'file') { f.classList.add('is-error'); f.focus(); }
+      showAlert(f.type === 'file' ? 'Please upload both the front and back photos of your ID.' : 'Please fill out every field.');
+      return false;
+    }
   }
+  return true;
+}
+
+async function next() {
+  if (step === 1) return verifiedEmail ? go(3) : sendCode(false);
+  if (step === 2) return verifyCode();
+  if (step === 5) return passwordValid() && go(6);
+  if (step === LAST) return submitRegistration();
+  if (stepValid(step)) go(step + 1);
+}
+
+/* ---------- steps 1–2: email + code ---------- */
+let codeSentTo = null;
+function startCooldown(sec) {
+  const btn = $('resendBtn'); clearInterval(cooldown);
+  let left = sec; btn.disabled = true; btn.textContent = `Resend code (${left}s)`;
+  cooldown = setInterval(() => {
+    if (--left <= 0) { clearInterval(cooldown); btn.disabled = false; btn.textContent = 'Resend code'; }
+    else btn.textContent = `Resend code (${left}s)`;
+  }, 1000);
+}
+/** Step 1 "Send code" (resend = false) or step 2 "Resend code" (resend = true). */
+async function sendCode(resend) {
+  const email = resend ? codeSentTo : $('university_email').value.trim().toLowerCase();
+  if (!/^[^@\s]+@students\.isatu\.edu\.ph$/.test(email || '')) { $('university_email').classList.add('is-error'); $('university_email').focus(); return showAlert('Please use your official @students.isatu.edu.ph email.'); }
+  // Same email and a code is still fresh: just go to step 2 instead of sending another
+  if (!resend && email === codeSentTo && $('resendBtn').disabled) { go(2); return; }
+  $('university_email').classList.remove('is-error'); showAlert('');
+  const btn = resend ? $('resendBtn') : $('nextBtn'); const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Sending…';
+  const r = await apiPost('/auth/register_send_code.php', { email });
+  btn.disabled = false; btn.textContent = label;
+  if (!r.success) {
+    const wait = /wait (\d+) seconds/.exec(r.message || '');
+    if (wait && email === codeSentTo) { go(2); startCooldown(+wait[1]); }
+    return showAlert(r.message);
+  }
+  codeSentTo = email; $('sentTo').textContent = email; $('verify_code').value = '';
+  go(2); startCooldown(60);
+  if (resend) showAlert('A new code was sent. Only the newest code works.', 'success');
+}
+async function verifyCode() {
+  const code = $('verify_code').value.trim();
+  if (!/^\d{6}$/.test(code)) { $('verify_code').classList.add('is-error'); $('verify_code').focus(); return showAlert('Enter the 6-digit code from the email.'); }
+  $('verify_code').classList.remove('is-error');
+  const btn = $('nextBtn'); btn.disabled = true; btn.textContent = 'Checking…';
+  const r = await apiPost('/auth/register_verify_code.php', { email: codeSentTo, code });
+  btn.disabled = false; btn.textContent = 'Verify';
+  if (!r.success) return showAlert(r.message);
+  verifiedEmail = r.email; clearInterval(cooldown);
+  $('university_email').value = verifiedEmail; $('university_email').readOnly = true;
+  $('verifiedNote').hidden = false; $('verifiedNote').textContent = `${verifiedEmail} is verified.`;
+  go(3);
+}
+
+/* ---------- step 5: password ---------- */
+function passwordValid() {
+  const pw = $('password'), pw2 = $('password_confirm');
+  pw.classList.remove('is-error'); pw2.classList.remove('is-error');
+  if (!passwordOk(pw.value)) { pw.classList.add('is-error'); pw.focus(); showAlert('Your password does not meet all the requirements yet.'); return false; }
+  if (pw.value !== pw2.value) { pw2.classList.add('is-error'); pw2.focus(); showAlert('The two passwords do not match.'); return false; }
+  return true;
+}
+
+/* ---------- step 6: review + submit ---------- */
+function renderReview() {
+  const opt = id => { const el = $(id); return el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : ''; };
+  const rows = [
+    ['School email', verifiedEmail], ['Full name', $('full_name').value.trim()], ['Student ID number', $('student_id_number').value.trim()],
+    ['Department', opt('department_id')], ['Course', opt('program_id')], ['Year level', $('year_level').value], ['Section', $('section').value.trim()],
+  ];
+  const thumb = name => { const f = document.querySelector(`input[name="${name}"]`).files[0]; return f ? `<img src="${URL.createObjectURL(f)}" alt="">` : ''; };
+  $('review').innerHTML = `<dl class="review-list">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+    <div class="review-ids"><figure>${thumb('id_photo_front')}<figcaption>ID front</figcaption></figure><figure>${thumb('id_photo_back')}<figcaption>ID back</figcaption></figure></div>
+    <p class="small muted">Password: set in step 5 (hidden). Something wrong? Click a step above or press Back to fix it.</p>`;
+}
+async function submitRegistration() {
+  if (!passwordValid()) { go(5); passwordValid(); return; }
+  const pw = $('password'), pw2 = $('password_confirm');
 
   const fd = new FormData();
-  fd.append('university_email', document.getElementById('university_email').value.trim());
-  fd.append('student_id_number', document.getElementById('student_id_number').value.trim());
-  fd.append('full_name', document.getElementById('full_name').value.trim());
-  fd.append('department_id', document.getElementById('department_id').value);
-  fd.append('program_id', document.getElementById('program_id').value);
-  fd.append('year_level', document.getElementById('year_level').value);
-  fd.append('section', document.getElementById('section').value.trim());
-  fd.append('password', pw.value);
-  fd.append('password_confirm', pw2.value);
+  fd.append('university_email', verifiedEmail);
+  ['student_id_number', 'full_name', 'department_id', 'program_id', 'year_level', 'section'].forEach(id => fd.append(id, $(id).value.trim()));
+  fd.append('password', pw.value); fd.append('password_confirm', pw2.value);
   fd.append('id_photo_front', document.querySelector('input[name="id_photo_front"]').files[0]);
   fd.append('id_photo_back', document.querySelector('input[name="id_photo_back"]').files[0]);
 
-  btn.disabled = true; btn.textContent = 'Creating account…';
-  const res = await fetch('/api/auth/register.php', { method: 'POST', body: fd, credentials: 'same-origin' });
-  const r = await res.json();
+  const btn = $('nextBtn'); btn.disabled = true; btn.textContent = 'Creating account…'; $('backBtn').disabled = true;
+  const r = await fetch('/api/auth/register.php', { method: 'POST', body: fd, credentials: 'same-origin' }).then(x => x.json()).catch(() => ({ success: false, message: 'Network error. Please try again.' }));
   if (r.success) {
-    box.innerHTML = `<div class="alert alert-success">${esc(r.message)}</div>`;
-    setTimeout(() => window.location.href = '/index.html', 1200);
+    showAlert(r.message, 'success');
+    setTimeout(() => window.location.href = '/index.html', 1400);
   } else {
-    btn.disabled = false; btn.textContent = 'Create account';
-    box.innerHTML = `<div class="alert alert-error">${esc(r.message)}</div>`;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    btn.disabled = false; btn.textContent = 'Create account'; $('backBtn').disabled = false;
+    showAlert(r.message);
+    if (/verify your school email/i.test(r.message)) { verifiedEmail = null; codeSentTo = null; $('university_email').readOnly = false; $('verifiedNote').hidden = true; go(1); showAlert(r.message); }
   }
+}
+
+// Enter key moves forward on every step (except inside the photo pickers)
+document.querySelector('.reg-card').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'file') { e.preventDefault(); next(); }
 });
+go(1);
 </script>
 </body>
 </html>

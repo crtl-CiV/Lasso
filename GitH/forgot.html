@@ -31,9 +31,10 @@
         <label for="code">6-digit code</label>
         <input type="text" id="code" required inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="\d{6}" placeholder="123456" style="letter-spacing:6px; font-size:20px; font-weight:600;">
         <label for="newPw">New password</label>
-        <input type="password" id="newPw" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters">
+        <input type="password" id="newPw" required autocomplete="new-password" placeholder="Create a new password">
+        <ul data-pw-rules-for="newPw"></ul>
         <label for="confirmPw">Confirm new password</label>
-        <input type="password" id="confirmPw" required minlength="8" autocomplete="new-password" placeholder="Type it again">
+        <input type="password" id="confirmPw" required autocomplete="new-password" placeholder="Type it again">
         <button class="btn btn-primary btn-block" style="margin-top:24px; padding:13px;" type="submit" id="resetBtn">Reset password</button>
       </form>
       <p class="auth-foot"><button type="button" class="link-btn" id="resendBtn">Resend code</button> · <button type="button" class="link-btn" id="changeEmailBtn">Use a different email</button></p>
@@ -100,6 +101,7 @@ $('changeEmailBtn').addEventListener('click', () => { $('alert1').innerHTML = ''
 
 $('resetForm').addEventListener('submit', async (e) => {
   e.preventDefault(); $('alert2').innerHTML = '';
+  if (!passwordOk($('newPw').value)) { $('alert2').innerHTML = alertHtml('Your new password does not meet all the requirements yet.', 'error'); return; }
   if ($('newPw').value !== $('confirmPw').value) { $('alert2').innerHTML = alertHtml('The two passwords do not match.', 'error'); return; }
   const btn = $('resetBtn'); btn.disabled = true; btn.textContent = 'Saving…';
   const r = await apiPost('/auth/forgot_reset.php', {

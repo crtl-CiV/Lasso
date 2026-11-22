@@ -128,6 +128,50 @@ async function logout(redirectTo) {
   window.location.href = redirectTo || '/index.html';
 }
 
+/* ---------------- passwords ---------------- */
+// Same rules the server enforces (bootstrap.php passwordProblem)
+const PW_RULES = [
+  ['len', 'At least 8 characters', pw => pw.length >= 8],
+  ['num', 'At least 1 number', pw => /[0-9]/.test(pw)],
+  ['cap', 'At least 1 capital letter', pw => /[A-Z]/.test(pw)],
+  ['sym', 'At least 1 special character (e.g. ! @ # $)', pw => /[^A-Za-z0-9]/.test(pw)],
+];
+function passwordOk(pw) { return PW_RULES.every(([, , test]) => test(pw)); }
+/** Live checklist under a new-password box. Put <ul data-pw-rules-for="inputId"></ul> in the page. */
+function bindPasswordRules(root = document) {
+  root.querySelectorAll('[data-pw-rules-for]').forEach(ul => {
+    if (ul.dataset.bound) return; ul.dataset.bound = '1';
+    const input = document.getElementById(ul.dataset.pwRulesFor); if (!input) return;
+    ul.classList.add('pw-rules');
+    const draw = () => { ul.innerHTML = PW_RULES.map(([k, label, test]) => `<li class="${test(input.value) ? 'ok' : ''}">${label}</li>`).join(''); };
+    input.addEventListener('input', draw); draw();
+  });
+}
+/** Adds a show/hide (eye) button to every password box, including ones added later (modals). */
+const EYE = '<path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/>';
+const EYE_OFF = '<path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c4.97 0 8.4 3.6 9.94 6.65a1 1 0 0 1 0 .7 13 13 0 0 1-1.67 2.68"/><path d="M14.08 14.16a3 3 0 0 1-4.24-4.24"/><path d="M17.48 17.5A10.74 10.74 0 0 1 2.06 12.35a1 1 0 0 1 0-.7 13.16 13.16 0 0 1 4.46-5.15"/><path d="m2 2 20 20"/>';
+function enhancePasswords(root = document) {
+  root.querySelectorAll('input[type=password]:not([data-eye])').forEach(input => {
+    input.dataset.eye = '1';
+    const wrap = document.createElement('span'); wrap.className = 'pw-wrap';
+    input.parentNode.insertBefore(wrap, input); wrap.appendChild(input);
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'pw-eye';
+    const paint = () => {
+      const shown = input.type === 'text';
+      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shown ? EYE_OFF : EYE}</svg>`;
+      btn.setAttribute('aria-label', shown ? 'Hide password' : 'Show password'); btn.title = shown ? 'Hide password' : 'Show password';
+      btn.setAttribute('aria-pressed', shown);
+    };
+    btn.addEventListener('click', () => { input.type = input.type === 'password' ? 'text' : 'password'; paint(); input.focus(); });
+    paint(); wrap.appendChild(btn);
+  });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  enhancePasswords(); bindPasswordRules();
+  new MutationObserver(() => { enhancePasswords(); bindPasswordRules(); }).observe(document.body, { childList: true, subtree: true });
+});
+
 // Basic piracy-deterrence measures on any page that includes this file
 document.addEventListener('contextmenu', (e) => {
   if (e.target.closest('.protected')) e.preventDefault();

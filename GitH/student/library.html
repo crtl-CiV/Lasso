@@ -26,34 +26,14 @@
   <div class="grid cols-3" id="grid"></div>
 </main>
 
-<!-- full-screen reader -->
-<div class="reader" id="reader">
-  <div class="reader-bar">
-    <button class="btn btn-outline btn-sm" id="backBtn" onclick="closeReader()">Back to Library</button>
-    <div class="title" id="readerTitle"></div>
-    <div class="muted" id="readerProgress"></div>
-  </div>
-  <div class="reader-stage protected" id="readerStage"></div>
-  <div class="reader-foot">
-    <button class="btn btn-outline btn-sm" id="prevBtn">Previous</button>
-    <span class="muted" id="readerPage"></span>
-    <button class="btn btn-primary btn-sm" id="nextBtn">Next</button>
-    <span class="protected-note" id="protectedNote"></span>
-  </div>
-</div>
-
 <script src="/assets/js/api.js"></script>
 <script src="/assets/js/ui.js"></script>
 <script>
-let library = [], tab = 'all', reading = null;
+let library = [], tab = 'all';
 
 async function init() {
   await requireAuth('student');
   renderStudentShell('library');
-  document.getElementById('backBtn').innerHTML = icon('back', 16) + ' Back to Library';
-  document.getElementById('prevBtn').innerHTML = icon('chevron-left', 16) + ' Previous';
-  document.getElementById('nextBtn').innerHTML = 'Next ' + icon('chevron-right', 16);
-  document.getElementById('protectedNote').innerHTML = icon('lock', 14) + ' Protected content · download and print disabled';
   await loadLibrary();
 }
 
@@ -131,34 +111,19 @@ function showSubInfo(materialId) {
     <button class="btn btn-primary btn-block" style="margin-top:16px;" onclick="closeModal()">Close</button>`);
 }
 
-/* ---------- reader ---------- */
+/* ---------- reader (scrolling, with page sidebar — see openPageReader in ui.js) ---------- */
 async function openReader(materialId) {
   const item = library.find(x => x.material_id === materialId);
   if (item && !live(item)) { toast('Your access to this material has expired.', 'error'); return; }
   const r = await apiGet(`/materials/get.php?id=${materialId}`);
   if (!r.success) { toast(r.message, 'error'); return; }
   const m = r.material;
-  const start = (item && item.last_page_read > 0 && item.last_page_read <= m.total_pages) ? item.last_page_read : (m.accessible_pages[0] || 1);
-  reading = { m, page: start, percent: item ? Math.round(item.percent_complete) || 0 : 0 };
-  document.getElementById('readerTitle').textContent = m.title;
-  document.getElementById('reader').classList.add('open');
-  showPage();
-}
-function showPage() {
-  const { m, page, percent } = reading;
-  document.getElementById('readerStage').innerHTML = `<img class="viewer-page-img protected" alt="Page ${page}" src="/api/materials/view_page.php?material_id=${m.id}&page=${page}">`;
-  document.getElementById('readerPage').textContent = `Page ${page} of ${m.total_pages}`;
-  document.getElementById('readerProgress').textContent = `${percent}% complete`;
-  document.getElementById('prevBtn').disabled = page <= 1;
-  document.getElementById('nextBtn').disabled = page >= m.total_pages;
-}
-document.getElementById('prevBtn').addEventListener('click', () => { if (reading.page > 1) { reading.page--; showPage(); } });
-document.getElementById('nextBtn').addEventListener('click', () => { if (reading.page < reading.m.total_pages) { reading.page++; showPage(); } });
-function closeReader() {
-  document.getElementById('reader').classList.remove('open');
-  document.getElementById('readerStage').innerHTML = '';
-  reading = null;
-  loadLibrary();
+  openPageReader({
+    material: m, pages: m.accessible_pages, track: true, backLabel: 'Back to Library',
+    startPage: item && item.last_page_read > 0 ? item.last_page_read : m.accessible_pages[0],
+    percent: item ? Number(item.percent_complete) || 0 : 0,
+    onClose: loadLibrary,
+  });
 }
 
 init();

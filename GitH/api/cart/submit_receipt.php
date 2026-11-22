@@ -7,9 +7,8 @@ $user = requireStudent();
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(false, 'Invalid request method.', 405);
 
 $code = trim($_POST['billing_code'] ?? '');
-$orNumber = trim($_POST['receipt_number'] ?? '');
 if (!$code) respond(false, 'Billing code is missing.', 422);
-if (strlen($orNumber) < 3 || strlen($orNumber) > 60) respond(false, 'Please enter the OR number printed on your receipt.', 422);
+// The OR number is read off the photo and typed by the admin when approving.
 
 $db = getDB();
 $stmt = $db->prepare("SELECT * FROM billing_statements WHERE billing_code = ? AND student_id = ?");
@@ -26,23 +25,20 @@ $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp']
 $mime = mime_content_type($_FILES['receipt_photo']['tmp_name']);
 if (!isset($allowed[$mime])) respond(false, 'The receipt photo must be a JPG, PNG or WEBP image.', 422);
 
-// One OR can only back one billing
-$stmt = $db->prepare("SELECT 1 FROM billing_statements WHERE receipt_number = ? AND id <> ?");
-$stmt->execute([$orNumber, $b['id']]);
-if ($stmt->fetch()) respond(false, 'This OR number has already been used for another billing.', 409);
-
 $objectPath = 'receipts/' . $b['id'] . '_' . time() . '_' . bin2hex(random_bytes(3)) . '.' . $allowed[$mime];
 if (!uploadToStorage(STORAGE_MATERIALS_BUCKET, $objectPath, $_FILES['receipt_photo']['tmp_name'], $mime)) {
     respond(false, 'Could not upload your receipt photo. Please try again.', 500);
 }
 
-try {
-    $db->prepare("UPDATE billing_statements
-                  SET receipt_number = ?, receipt_photo = ?, receipt_status = 'submitted',
-                      receipt_note = NULL, receipt_submitted_at = NOW()
-                  WHERE id = ?")->execute([$orNumber, $objectPath, $b['id']]);
-} catch (PDOException $e) {
-    respond(false, 'This OR number has already been used for another billing.', 409);
+// Conditional update: if two submissions race (double-click), only the first one wins
+$st = $db->prepare("UPDATE billing_statements
+              SET receipt_number = NULL, receipt_photo = ?, receipt_status = 'submitted',
+                  receipt_note = NULL, receipt_submitted_at = NOW()
+              WHERE id = ? AND status = 'pending' AND receipt_status IS DISTINCT FROM 'submitted'");
+$st->execute([$objectPath, $b['id']]);
+if ($st->rowCount() === 0) {
+    deleteStorageObjects(STORAGE_MATERIALS_BUCKET, [$objectPath]);
+    respond(false, 'Your receipt is already waiting for review.', 409);
 }
 
 // A rejected earlier photo is no longer needed

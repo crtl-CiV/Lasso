@@ -17,17 +17,21 @@ if (isset($_POST['password_confirm']) && (string)$_POST['password_confirm'] !== 
 if (!$studentId || !$email || !$password || !$fullName || !$departmentId || !$programId || !$yearLevel || !$section) {
     respond(false, 'Please fill out all required fields.', 422);
 }
-if (strlen($password) < 8) {
-    respond(false, 'Password must be at least 8 characters.', 422);
+if ($problem = passwordProblem($password)) respond(false, $problem, 422);
+$email = strtolower($email);
+if (!str_ends_with($email, SCHOOL_EMAIL_DOMAIN)) {
+    respond(false, 'Please register using your official ' . SCHOOL_EMAIL_DOMAIN . ' email.', 422);
 }
-if (!str_ends_with(strtolower($email), '@students.isatu.edu.ph')) {
-    respond(false, 'Please register using your official @students.isatu.edu.ph email.', 422);
+// The email must have been verified with an emailed code in this browser, within the last hour
+$ver = $_SESSION['reg_verified'] ?? null;
+if (!$ver || $ver['email'] !== $email || time() - $ver['at'] > 3600) {
+    respond(false, 'Please verify your school email first (step 1).', 403);
 }
 
 $db = getDB();
 
 // studentID already registered? (Alt flow from the Register sequence diagram)
-$stmt = $db->prepare('SELECT id FROM students WHERE student_id_number = ? OR university_email = ?');
+$stmt = $db->prepare('SELECT id FROM students WHERE student_id_number = ? OR LOWER(university_email) = ?');
 $stmt->execute([$studentId, $email]);
 if ($stmt->fetch()) {
     respond(false, 'This Student ID or university email is already registered.', 409);
@@ -59,4 +63,5 @@ $stmt = $db->prepare('INSERT INTO students
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 $stmt->execute([$studentId, $email, $hash, $fullName, $departmentId, $programId, $yearLevel, $section, $idFront, $idBack]);
 
+unset($_SESSION['reg_verified']);
 respond(true, ['message' => 'Account created successfully. You may now log in.']);

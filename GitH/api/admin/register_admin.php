@@ -10,9 +10,11 @@ $fullName = trim($in['full_name'] ?? '');
 $position = trim($in['position'] ?? '');
 $password = (string)($in['password'] ?? '');
 
-if (!$adminId || !$email || !$fullName || !$position || strlen($password) < 8) {
-    respond(false, 'All fields are required and password must be at least 8 characters.', 422);
+if (!$adminId || !$email || !$fullName || !$position || $password === '') {
+    respond(false, 'All fields are required.', 422);
 }
+if (!in_array($position, ADMIN_POSITIONS, true)) respond(false, 'Please choose a position from the list.', 422);
+if ($problem = passwordProblem($password)) respond(false, $problem, 422);
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     respond(false, 'Please enter a valid email address.', 422);
 }

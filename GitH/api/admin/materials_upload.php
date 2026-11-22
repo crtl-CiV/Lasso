@@ -96,7 +96,6 @@ $price = (float)($_POST['price'] ?? 0);
 $authorName = trim($_POST['author_name'] ?? '');
 $subjectCode = substr(trim($_POST['subject_code'] ?? ''), 0, 30) ?: null;
 $nonBodyPages = json_decode($_POST['non_body_pages'] ?? '[]', true) ?: [];
-$previewExcluded = json_decode($_POST['preview_excluded_pages'] ?? '[]', true) ?: [];
 
 if (!$title || $price < 0) respond(false, 'Title and a valid price are required.', 422);
 if (!$authorName) respond(false, 'Author name is required.', 422);
@@ -129,7 +128,7 @@ $stmt = $db->prepare("INSERT INTO instructional_materials
     (material_code, title, description, department_id, program_id, year_level, year_mask, semester_mask, price, author_id, total_pages, non_body_pages, preview_excluded_pages, status, uploaded_by, subject_code)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'draft', ?, ?)
     RETURNING id");
-$stmt->execute([$code, $title, $description, $departmentId, $programId, $yearLevel, $yearMask, $semesterMask, $price, $authorId, json_encode($nonBodyPages), json_encode($previewExcluded), $admin['id'], $subjectCode]);
+$stmt->execute([$code, $title, $description, $departmentId, $programId, $yearLevel, $yearMask, $semesterMask, $price, $authorId, json_encode($nonBodyPages), '[]', $admin['id'], $subjectCode]);
 $materialId = (int)$stmt->fetchColumn();
 
 $coverPath = saveCover($materialId);

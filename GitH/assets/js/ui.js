@@ -33,7 +33,7 @@ function renderStudentShell(active) {
     </nav>
     <div class="topnav-right">
       <a class="iconbtn ${active === 'profile' ? 'active' : ''}" href="/student/profile.html" title="Profile" aria-label="Profile">${icon('user', 20)}<span class="lbl">Profile</span></a>
-      <button class="iconbtn" onclick="logout('/index.html')" title="Log out" aria-label="Log out">${icon('logout', 20)}<span class="lbl">Log out</span></button>
+      <button class="iconbtn" onclick="confirmLogout()" title="Log out" aria-label="Log out">${icon('logout', 20)}<span class="lbl">Log out</span></button>
     </div>`;
   refreshCartBadge();
 }
@@ -62,7 +62,7 @@ function renderAdminShell(active, user) {
     <button class="iconbtn nav-toggle" aria-label="Menu" onclick="toggleAdminNav()">${icon('menu')}</button>
     <div class="row-gap">
       <span class="account"><span class="avatar">${esc(initials(user && user.full_name || who))}</span>${esc(who)}</span>
-      <button class="iconbtn" onclick="logout('/index.html')" title="Log out" aria-label="Log out">${icon('logout', 20)}</button>
+      <button class="iconbtn" onclick="confirmLogout()" title="Log out" aria-label="Log out">${icon('logout', 20)}</button>
     </div>`;
 }
 function toggleAdminNav() { document.getElementById('adminRoot').classList.toggle('nav-open'); }
@@ -92,20 +92,149 @@ function modalHead(title, sub) {
     <button class="btn-close" onclick="closeModal()" aria-label="Close">${icon('x', 18)}</button></div>`;
 }
 
+/** Log out only after the person confirms. */
+function confirmLogout() {
+  openModal(`${modalHead('Log out of LASSO?', 'You will need to log in again to continue.')}
+    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="confirmLogoutBtn" onclick="this.disabled = true; this.textContent = 'Logging out…'; logout('/index.html')">Log out</button></div>`);
+  setTimeout(() => { const b = document.getElementById('confirmLogoutBtn'); if (b) b.focus(); }, 0);
+}
+
 /* ---------------- file drop zones ---------------- */
 function dropzoneHtml(name, title, hint, accept = 'image/*', required = true) {
   return `<label class="dropzone">${icon('upload', 22)}<span class="dz-title">${title}</span><span class="small">${hint || ''}</span>
     <input type="file" name="${name}" accept="${accept}" ${required ? 'required' : ''}></label>`;
 }
 /** Shows the chosen file name(s) and supports drag & drop. Call after inserting drop zones. */
+/** Clears every drop zone inside root (after a form reset). */
+function resetDropzones(root = document) { root.querySelectorAll('.dropzone').forEach(dz => dz.resetPreview && dz.resetPreview()); }
 function bindDropzones(root = document) {
   root.querySelectorAll('.dropzone').forEach((dz) => {
     if (dz.dataset.bound) return; dz.dataset.bound = '1';
     const input = dz.querySelector('input[type=file]'), title = dz.querySelector('.dz-title'), original = title.textContent;
-    const show = () => { const n = input.files.length; dz.classList.toggle('has-file', n > 0); title.textContent = n > 1 ? `${n} files selected` : n === 1 ? input.files[0].name : original; };
+    const show = () => {
+      const files = [...input.files], n = files.length;
+      dz.classList.toggle('has-file', n > 0);
+      title.textContent = n > 1 ? `${n} files selected` : n === 1 ? files[0].name : original;
+      // Thumbnail of the chosen image (the first one when several are picked) so the right photo is easy to confirm
+      const old = dz.querySelector('.dz-preview'); if (old) { URL.revokeObjectURL(old.dataset.url || ''); old.remove(); }
+      const img = files.find(f => f.type.startsWith('image/'));
+      if (img) {
+        const url = URL.createObjectURL(img);
+        dz.insertAdjacentHTML('afterbegin', `<span class="dz-preview" data-url="${url}"><img src="${url}" alt="Preview of ${esc(img.name)}">${n > 1 ? `<span class="dz-more">+${n - 1} more</span>` : ''}</span>`);
+      }
+      dz.classList.toggle('has-preview', !!img);
+    };
+    dz.resetPreview = () => { input.value = ''; show(); };
     input.addEventListener('change', show);
     ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('drag'); }));
     ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('drag'); }));
     dz.addEventListener('drop', (e) => { if (e.dataTransfer && e.dataTransfer.files.length) { input.files = e.dataTransfer.files; show(); } });
   });
+}
+
+/* ---------------- scrolling page reader ----------------
+   Full-screen reader: every page in one scrolling column, with a numbered
+   thumbnail sidebar (like a PDF viewer). Pages load as they come near the
+   screen. With track = true, a page counts as read after ~2 seconds on screen.
+   openPageReader({ material, pages: [page numbers], startPage, track, percent, onClose }) */
+let _reader = null;
+const scrollBox = (el, top, smooth) => { if (el.scrollTo) el.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' }); else el.scrollTop = top; };
+function openPageReader(opts) {
+  closePageReader(true);
+  const m = opts.material, pages = opts.pages, src = p => `/api/materials/view_page.php?material_id=${m.id}&page=${p}`;
+  const el = document.createElement('div');
+  el.className = 'reader open'; el.id = 'pageReader';
+  el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', `Reading ${m.title}`);
+  el.innerHTML = `
+    <div class="reader-bar">
+      <button class="btn btn-outline btn-sm" onclick="closePageReader()">${icon('back', 16)} ${esc(opts.backLabel || 'Back')}</button>
+      <button class="btn btn-ghost btn-sm reader-pages-btn" onclick="document.getElementById('pageReader').classList.toggle('thumbs-open')" aria-label="Show page list">${icon('menu', 16)} Pages</button>
+      <div class="title">${esc(m.title)}${opts.preview ? ' <span class="badge badge-warning">Preview</span>' : ''}</div>
+      <div class="muted small" id="rdPos"></div>
+      ${opts.track ? '<div class="muted small" id="rdPct"></div>' : ''}
+      <span class="protected-note small">${icon('lock', 14)} Protected · download and print disabled</span>
+    </div>
+    <div class="reader-body">
+      <nav class="reader-thumbs" aria-label="Pages">
+        ${pages.map(p => `<button type="button" class="rthumb" data-page="${p}" aria-label="Go to page ${p}">
+          <span class="rthumb-img"><img loading="lazy" alt="" data-src="${src(p)}"></span><span class="rthumb-no">${p}</span></button>`).join('')}
+      </nav>
+      <div class="reader-stage protected" id="rdStage">
+        ${pages.map(p => `<figure class="rpage" id="rp-${p}" data-page="${p}"><img class="viewer-page-img protected" alt="Page ${p}" data-src="${src(p)}"><figcaption>Page ${p}</figcaption></figure>`).join('')}
+        ${opts.footer || ''}
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+  document.body.style.overflow = 'hidden';
+  const stage = el.querySelector('#rdStage'), thumbsNav = el.querySelector('.reader-thumbs');
+  const state = _reader = { el, timers: {}, done: new Set(), visible: new Map(), current: null, observers: [], onClose: opts.onClose };
+
+  const setPct = pct => { const x = el.querySelector('#rdPct'); if (x) x.textContent = `${Math.round(pct)}% complete`; };
+  if (opts.track) setPct(opts.percent || 0);
+
+  const markCurrent = (p) => {
+    if (state.current === p) return; state.current = p;
+    el.querySelector('#rdPos').textContent = `Page ${p} of ${m.total_pages}`;
+    thumbsNav.querySelectorAll('.rthumb').forEach(b => { const on = +b.dataset.page === p; b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+    const t = thumbsNav.querySelector(`.rthumb[data-page="${p}"]`);
+    if (t) { const top = t.offsetTop - thumbsNav.clientHeight / 2 + t.clientHeight / 2; scrollBox(thumbsNav, top, true); }
+  };
+
+  // 1) Load page images shortly before they scroll into view
+  const loader = new IntersectionObserver(entries => entries.forEach(e => {
+    if (!e.isIntersecting) return;
+    const img = e.target.querySelector('img'); if (img && img.dataset.src) { img.src = img.dataset.src; delete img.dataset.src; }
+    loader.unobserve(e.target);
+  }), { root: stage, rootMargin: '1200px 0px' });
+  const thumbLoader = new IntersectionObserver(entries => entries.forEach(e => {
+    if (!e.isIntersecting) return;
+    const img = e.target.querySelector('img'); if (img && img.dataset.src) { img.src = img.dataset.src; delete img.dataset.src; }
+    thumbLoader.unobserve(e.target);
+  }), { root: thumbsNav, rootMargin: '400px 0px' });
+
+  // 2) Which page is on screen now, and which pages stayed ~2s (read)
+  const watcher = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      const p = +e.target.dataset.page;
+      state.visible.set(p, e.intersectionRatio);
+      if (!opts.track || state.done.has(p)) return;
+      if (e.intersectionRatio >= 0.5 && !state.timers[p]) {
+        state.timers[p] = setTimeout(async () => {
+          state.done.add(p);
+          const r = await apiPost('/materials/mark_read.php', { material_id: m.id, page: p });
+          if (r.success) setPct(r.percent_complete);
+        }, 2000);
+      } else if (e.intersectionRatio < 0.5 && state.timers[p]) { clearTimeout(state.timers[p]); delete state.timers[p]; }
+    });
+    let best = null, bestR = 0;
+    state.visible.forEach((r, p) => { if (r > bestR) { bestR = r; best = p; } });
+    if (best) markCurrent(best);
+  }, { root: stage, threshold: [0, 0.25, 0.5, 0.75, 1] });
+
+  stage.querySelectorAll('.rpage').forEach(f => { loader.observe(f); watcher.observe(f); });
+  thumbsNav.querySelectorAll('.rthumb').forEach(b => {
+    thumbLoader.observe(b);
+    b.addEventListener('click', () => { goToPage(+b.dataset.page); el.classList.remove('thumbs-open'); });
+  });
+  state.observers = [loader, thumbLoader, watcher];
+
+  function goToPage(p, instant) {
+    const f = stage.querySelector(`#rp-${p}`); if (!f) return;
+    const img = f.querySelector('img'); if (img.dataset.src) { img.src = img.dataset.src; delete img.dataset.src; }
+    scrollBox(stage, f.offsetTop - 16, !instant);
+  }
+  const start = pages.includes(opts.startPage) ? opts.startPage : pages[0];
+  if (start) { markCurrent(start); requestAnimationFrame(() => goToPage(start, true)); }
+  el._keys = e => { if (e.key === 'Escape') closePageReader(); };
+  document.addEventListener('keydown', el._keys);
+}
+function closePageReader(silent) {
+  const st = _reader; if (!st) return;
+  Object.values(st.timers).forEach(clearTimeout);
+  st.observers.forEach(o => o.disconnect());
+  document.removeEventListener('keydown', st.el._keys);
+  st.el.remove(); document.body.style.overflow = '';
+  _reader = null;
+  if (!silent && st.onClose) st.onClose();
 }

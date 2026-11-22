@@ -15,7 +15,7 @@ $new     = (string)($in['new_password'] ?? '');
 $confirm = (string)($in['confirm_password'] ?? $new);
 
 if (!$email || strlen($code) !== 6) respond(false, 'Enter the 6-digit code from the email.', 422);
-if (strlen($new) < 8) respond(false, 'New password must be at least 8 characters.', 422);
+if ($problem = passwordProblem($new)) respond(false, $problem, 422);
 if ($new !== $confirm) respond(false, 'The two passwords do not match.', 422);
 
 $db = getDB();

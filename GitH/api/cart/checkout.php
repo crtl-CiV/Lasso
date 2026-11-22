@@ -17,6 +17,17 @@ $closed = array_filter($items, fn($it) => $it['status'] !== 'published' || !mate
 if ($closed) {
     respond(false, 'No longer available for your year level or this semester: ' . implode(', ', array_column($closed, 'title')) . '. Please remove them from your cart.', 409);
 }
+// The same material must not sit in two unpaid billings (the second payment would be wasted)
+$st = $db->prepare("SELECT m.title, b.billing_code FROM billing_statement_items bi
+                     JOIN billing_statements b ON b.id = bi.billing_id
+                     JOIN instructional_materials m ON m.id = bi.material_id
+                     JOIN cart_items c ON c.material_id = bi.material_id AND c.student_id = b.student_id
+                     WHERE b.student_id = ? AND b.status = 'pending'");
+$st->execute([$user['id']]);
+if ($dups = $st->fetchAll()) {
+    $list = implode('; ', array_map(fn($d) => $d['title'] . ' (billing ' . $d['billing_code'] . ')', $dups));
+    respond(false, 'Already in a billing that is not approved yet: ' . $list . '. Pay and submit the receipt for that billing, or cancel it from your Cart page, then remove these from your cart.', 409);
+}
 $items = array_map(fn($it) => ['id' => $it['id'], 'title' => $it['title'], 'price' => $it['price']], $items);
 
 [$semester, $ay] = currentTerm();

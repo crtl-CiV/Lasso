@@ -21,19 +21,17 @@
     </div>
 
     <div class="card">
-      <h2>Review a receipt</h2>
-      <p class="muted" style="margin:4px 0 12px;">Enter the billing code the student gives you to check their official receipt and grant access.</p>
+      <h2>Find a student or billing</h2>
+      <p class="muted" style="margin:4px 0 12px;">Filters <b>Awaiting access</b> and <b>Approved history</b> as you type. Press <b>Review</b> next to a student to check their receipt and grant access.</p>
       <div id="billingAlert"></div>
-      <form id="billingForm" style="display:flex; gap:10px; flex-wrap:wrap;">
-        <input type="text" id="billingCode" placeholder="Billing code, e.g. BS-XXXXXXXX" style="flex:1; min-width:220px;" required>
-        <button class="btn btn-primary" type="submit">Review receipt</button>
-      </form>
+      <div class="search"><span class="search-icon" id="searchIcon"></span>
+        <input type="search" id="salesSearch" placeholder="Search by student name, student ID, billing code or OR number" aria-label="Search billings" autocomplete="off"></div>
     </div>
 
     <div class="card flush">
       <div class="card-head"><h2>Awaiting access</h2></div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Billing code</th><th>Student</th><th>Amount</th><th>Term</th><th>Receipt</th><th>OR no.</th><th></th></tr></thead>
+        <thead><tr><th>Student</th><th>Billing code</th><th>Amount</th><th>Term</th><th>Receipt</th><th></th></tr></thead>
         <tbody id="pendingBody"></tbody>
       </table></div>
     </div>
@@ -105,7 +103,7 @@
 <script src="/assets/js/api.js"></script>
 <script src="/assets/js/ui.js"></script>
 <script>
-let refs = { departments: [], programs: [] }, lastReport = null, historyCache = [];
+let refs = { departments: [], programs: [] }, lastReport = null, historyCache = [], pendingCache = [];
 let showAllHistory = false, showAllReport = false;
 const HISTORY_LIMIT = 5, REPORT_LIMIT = 5;
 
@@ -113,19 +111,22 @@ async function init() {
   const user = await requireAuth('admin');
   renderAdminShell('sales', user);
   document.getElementById('printIcon').innerHTML = icon('print', 16);
+  document.getElementById('searchIcon').innerHTML = icon('search', 18);
   await loadFilterOptions();
   await Promise.all([loadPending(), loadBillingHistory(), loadReport()]);
   const code = new URLSearchParams(location.search).get('review');   // linked from the dashboard
   if (code) reviewBilling(code);
 }
 
-/* =============== receipts =============== */
-document.getElementById('billingForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const ok = await reviewBilling(document.getElementById('billingCode').value.trim());
-  if (ok) document.getElementById('billingCode').value = '';
-});
+/* =============== search (filters both lists) =============== */
+const searchTerm = () => document.getElementById('salesSearch').value.trim().toLowerCase();
+function matches(b) {
+  const q = searchTerm(); if (!q) return true;
+  return [b.full_name, b.student_name, b.student_id_number, b.billing_code, b.receipt_number].some(v => v && String(v).toLowerCase().includes(q));
+}
+document.getElementById('salesSearch').addEventListener('input', () => { renderPending(); renderHistory(); });
 
+/* =============== receipts =============== */
 async function reviewBilling(code) {
   const box = document.getElementById('billingAlert');
   box.innerHTML = '';
@@ -139,13 +140,15 @@ async function reviewBilling(code) {
     receiptBlock = `<div class="alert alert-success">This billing was already approved (OR ${esc(b.receipt_number || '—')}).</div>`;
   } else if (b.receipt_status === 'submitted') {
     receiptBlock = `
-      <p><b>OR number submitted:</b> ${esc(b.receipt_number)}</p>
-      <img src="/api/admin/receipt_photo.php?id=${b.id}" alt="Receipt" style="width:100%; max-height:380px; object-fit:contain; border:1px solid var(--slate-200); border-radius:12px; background:var(--slate-50); margin-top:8px;">
-      <label style="margin-top:16px;">Type the billing code to grant access</label>
-      <input type="text" id="rcpConfirmCode" placeholder="${esc(b.billing_code)}" autocomplete="off">
+      <a href="/api/admin/receipt_photo.php?id=${b.id}" target="_blank" rel="noopener" title="Open full size">
+        <img src="/api/admin/receipt_photo.php?id=${b.id}" alt="Receipt photo" class="receipt-big" style="max-height:380px;"></a>
+      <p class="small muted" style="margin-top:6px;">Check that the amount matches ${peso(b.total_amount)}. Click the photo to open it full size.</p>
+      <label for="rcpOr" style="margin-top:12px;">OR number on the receipt</label>
+      <input type="text" id="rcpOr" placeholder="Type the OR number printed on the photo" autocomplete="off" maxlength="60">
+      <div class="field-hint">Each OR number can only be used once, so duplicates are caught.</div>
       <div id="rcpAlert"></div>
       <div style="display:flex; gap:10px; margin-top:14px;">
-        <button class="btn btn-primary" style="flex:1;" onclick="approveBilling('${esc(b.billing_code)}')">Validate &amp; grant access</button>
+        <button class="btn btn-primary" style="flex:1;" id="approveBtn" onclick="approveBilling('${esc(b.billing_code)}')">Approve &amp; grant access</button>
         <button class="btn btn-danger" style="flex:1;" onclick="showReject('${esc(b.billing_code)}')">Reject</button>
       </div>`;
   } else if (b.receipt_status === 'rejected') {
@@ -160,15 +163,19 @@ async function reviewBilling(code) {
       <tfoot><tr><td><b>Total</b></td><td class="text-right"><b>${peso(b.total_amount)}</b></td></tr></tfoot></table>
     <div style="margin-top:14px;">${receiptBlock}</div>
     <button class="btn btn-outline btn-block" style="margin-top:14px;" onclick="closeModal()">Close</button>`, { wide: 600 });
+  const orBox = document.getElementById('rcpOr');
+  if (orBox) { orBox.focus(); orBox.addEventListener('keydown', e => { if (e.key === 'Enter') approveBilling(b.billing_code); }); }
   return true;
 }
 
 async function approveBilling(code) {
-  const typed = document.getElementById('rcpConfirmCode').value.trim();
-  const box = document.getElementById('rcpAlert');
-  if (typed.toLowerCase() !== code.toLowerCase()) { box.innerHTML = '<div class="alert alert-error">The billing code you typed does not match this billing.</div>'; return; }
-  const r = await apiPost('/admin/confirm_payment.php', { billing_code: code, action: 'approve' });
-  if (!r.success) { box.innerHTML = `<div class="alert alert-error">${esc(r.message)}</div>`; return; }
+  const orNumber = document.getElementById('rcpOr').value.trim();
+  const box = document.getElementById('rcpAlert'), btn = document.getElementById('approveBtn');
+  if (orNumber.length < 3) { box.innerHTML = '<div class="alert alert-error">Type the OR number printed on the receipt photo.</div>'; document.getElementById('rcpOr').focus(); return; }
+  if (btn.disabled) return;
+  btn.disabled = true; btn.textContent = 'Approving…';
+  const r = await apiPost('/admin/confirm_payment.php', { billing_code: code, action: 'approve', receipt_number: orNumber });
+  if (!r.success) { btn.disabled = false; btn.innerHTML = 'Approve &amp; grant access'; box.innerHTML = `<div class="alert alert-error">${esc(r.message)}</div>`; return; }
   closeModal();
   document.getElementById('billingAlert').innerHTML =
     `<div class="alert alert-success">Access granted to <b>${esc(r.student_name)}</b> (${esc(r.student_id_number)}) for: ${r.materials.map(esc).join(', ')}. ${r.email_sent ? 'The student was notified by email.' : '<br><span class="small">The email notification could not be sent — let the student know directly.</span>'}</div>`;
@@ -198,17 +205,22 @@ function viewReceipt(id, orNumber) {
 
 async function loadPending() {
   const r = await apiGet('/admin/pending_billings.php');
+  pendingCache = r.success ? r.pending_billings : [];
+  renderPending();
+}
+function renderPending() {
   const body = document.getElementById('pendingBody');
-  if (!r.success || !r.pending_billings.length) { body.innerHTML = '<tr><td colspan="7" class="muted">No billings waiting for access.</td></tr>'; return; }
+  if (!pendingCache.length) { body.innerHTML = '<tr><td colspan="6" class="muted">No billings waiting for access.</td></tr>'; return; }
+  const rows = pendingCache.filter(matches);
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="muted">No billing waiting for access matches your search.</td></tr>'; return; }
   const st = { none: badge('neutral', 'No receipt yet'), submitted: badge('info', 'Needs review'), rejected: badge('danger', 'Rejected') };
-  body.innerHTML = r.pending_billings.map(b => `
+  body.innerHTML = rows.map(b => `
     <tr>
-      <td><b>${esc(b.billing_code)}</b></td>
-      <td>${esc(b.full_name)}<div class="muted small">${esc(b.student_id_number)}</div></td>
+      <td><b>${esc(b.full_name)}</b><div class="muted small">${esc(b.student_id_number)}</div></td>
+      <td>${esc(b.billing_code)}</td>
       <td>${peso(b.total_amount)}</td>
       <td>${esc(b.semester)}, AY ${esc(b.academic_year)}</td>
       <td>${st[b.receipt_status] || st.none}</td>
-      <td>${esc(b.receipt_number || '—')}</td>
       <td class="text-right">${b.receipt_status === 'submitted' ? `<button class="btn btn-primary btn-sm" onclick="reviewBilling('${esc(b.billing_code)}')">Review</button>` : ''}</td>
     </tr>`).join('');
 }
@@ -224,8 +236,21 @@ function renderHistory() {
   const body = document.getElementById('billingHistoryBody');
   const wrap = document.getElementById('historyMore');
   if (!historyCache.length) { body.innerHTML = '<tr><td colspan="8" class="muted">No approved payments yet.</td></tr>'; wrap.classList.add('hidden'); return; }
+  if (searchTerm()) {   // searching shows every match, not just the newest 5
+    const hits = historyCache.filter(matches);
+    wrap.classList.add('hidden');
+    if (!hits.length) { body.innerHTML = '<tr><td colspan="8" class="muted">No approved billing matches your search.</td></tr>'; return; }
+    body.innerHTML = hits.map(historyRow).join('');
+    return;
+  }
   const shown = showAllHistory ? historyCache : historyCache.slice(0, HISTORY_LIMIT);
-  body.innerHTML = shown.map(b => `
+  body.innerHTML = shown.map(historyRow).join('');
+  const more = historyCache.length - HISTORY_LIMIT;
+  wrap.classList.toggle('hidden', more <= 0);
+  document.getElementById('historyToggle').textContent = showAllHistory ? 'Show fewer' : `Show ${more} older approval${more === 1 ? '' : 's'}`;
+}
+function historyRow(b) {
+  return `
     <tr>
       <td><b>${esc(b.billing_code)}</b><div class="muted small">${esc(b.student_name)} · ${esc(b.student_id_number)}</div></td>
       <td>${fmtDate(b.confirmed_at)}</td>
@@ -236,10 +261,7 @@ function renderHistory() {
       <td>${esc(b.receipt_number || '—')}</td>
       <td>${esc(b.confirmed_by_name || '—')}</td>
       <td class="text-right">${b.receipt_number ? `<button class="btn btn-ghost btn-sm" onclick="viewReceipt(${b.id}, '${esc(b.receipt_number)}')">${icon('eye', 14)} Receipt</button>` : ''}</td>
-    </tr>`).join('');
-  const more = historyCache.length - HISTORY_LIMIT;
-  wrap.classList.toggle('hidden', more <= 0);
-  document.getElementById('historyToggle').textContent = showAllHistory ? 'Show fewer' : `Show ${more} older approval${more === 1 ? '' : 's'}`;
+    </tr>`;
 }
 document.getElementById('historyToggle').addEventListener('click', () => { showAllHistory = !showAllHistory; renderHistory(); });
 

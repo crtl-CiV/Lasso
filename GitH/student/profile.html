@@ -68,8 +68,9 @@
     <form id="pwForm">
       <div class="form-row">
         <div><label for="current_password">Current password</label><input type="password" id="current_password" required autocomplete="current-password"></div>
-        <div><label for="new_password">New password</label><input type="password" id="new_password" required minlength="8" autocomplete="new-password"></div>
+        <div><label for="new_password">New password</label><input type="password" id="new_password" required autocomplete="new-password"></div>
       </div>
+      <ul data-pw-rules-for="new_password"></ul>
       <button class="btn btn-primary" style="margin-top:16px;" type="submit">Update password</button>
     </form>
   </div>
@@ -152,18 +153,19 @@ document.getElementById('yrForm').addEventListener('submit', async (e) => {
   const r = await res.json();
   btn.disabled = false; btn.textContent = 'Submit request';
   box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${esc(r.message)}</div>`;
-  if (r.success) { e.target.reset(); document.querySelectorAll('#yrForm .dropzone').forEach(d => d.classList.remove('has-file')); loadYearStatus(); }
+  if (r.success) { e.target.reset(); resetDropzones(document.getElementById('yrForm')); loadYearStatus(); }
 });
 
 document.getElementById('pwForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const box = document.getElementById('pwAlert');
+  if (!passwordOk(document.getElementById('new_password').value)) { box.innerHTML = '<div class="alert alert-error">The new password does not meet all the requirements yet.</div>'; return; }
   const r = await apiPost('/auth/change_password.php', {
     current_password: document.getElementById('current_password').value,
     new_password: document.getElementById('new_password').value,
   });
   box.innerHTML = `<div class="alert ${r.success ? 'alert-success' : 'alert-error'}">${esc(r.message)}</div>`;
-  if (r.success) e.target.reset();
+  if (r.success) { e.target.reset(); e.target.querySelectorAll('input').forEach(i => i.dispatchEvent(new Event('input'))); }
 });
 
 init();

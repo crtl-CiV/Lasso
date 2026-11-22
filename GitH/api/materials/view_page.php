@@ -22,10 +22,9 @@ if (!$subscribed) {
         respond(false, 'This material is not available for your year level or the current semester.', 403);
     }
     $nonBody = json_decode($m['non_body_pages'] ?? '[]', true) ?: [];
-    $excluded = json_decode($m['preview_excluded_pages'] ?? '[]', true) ?: [];
     $bodyPages = [];
     for ($p = 1; $p <= (int)$m['total_pages']; $p++) if (!in_array($p, $nonBody)) $bodyPages[] = $p;
-    $previewAllowed = array_slice(array_values(array_diff($bodyPages, $excluded)), 0, 5);
+    $previewAllowed = array_slice($bodyPages, 0, 5);
     if (!in_array($page, $previewAllowed, true)) {
         respond(false, 'Subscribe to this material to view this page.', 403);
     }
@@ -50,27 +49,7 @@ if (!$result) {
 }
 [$fileBytes, $fileMime] = $result;
 
-// Log progress for subscribed students (body pages only)
-if ($subscribed) {
-    $nonBody = json_decode($m['non_body_pages'] ?? '[]', true) ?: [];
-    if (!in_array($page, $nonBody)) {
-        $stmt = $db->prepare("SELECT pages_read FROM progress_tracker WHERE student_id=? AND material_id=?");
-        $stmt->execute([$user['id'], $materialId]);
-        $row = $stmt->fetch();
-        $pagesRead = $row ? (json_decode($row['pages_read'], true) ?: []) : [];
-        if (!in_array($page, $pagesRead)) $pagesRead[] = $page;
-        $bodyTotal = 0;
-        for ($p = 1; $p <= (int)$m['total_pages']; $p++) if (!in_array($p, $nonBody)) $bodyTotal++;
-        $percent = $bodyTotal ? round(count($pagesRead) / $bodyTotal * 100, 2) : 0;
-        $stmt = $db->prepare("INSERT INTO progress_tracker (student_id, material_id, pages_read, last_page_read, percent_complete)
-                               VALUES (?, ?, ?, ?, ?)
-                               ON CONFLICT ON CONSTRAINT uq_progress
-                               DO UPDATE SET pages_read = EXCLUDED.pages_read,
-                                             last_page_read = EXCLUDED.last_page_read,
-                                             percent_complete = EXCLUDED.percent_complete");
-        $stmt->execute([$user['id'], $materialId, json_encode($pagesRead), $page, $percent]);
-    }
-}
+// Reading progress is recorded separately (mark_read.php), after a page has been on screen for ~2 seconds.
 
 // Anti-piracy headers: no caching, inline only, no content-disposition download
 header('Content-Type: ' . $fileMime);

@@ -26,7 +26,7 @@ function sendEmail(string $toEmail, string $toName, string $subject, string $htm
     }
     $payload = json_encode(['Messages' => [[
         'From' => ['Email' => getenv('MAIL_FROM_EMAIL'), 'Name' => getenv('MAIL_FROM_NAME') ?: 'LASSO'],
-        'To' => [['Email' => $toEmail, 'Name' => $toName]],
+        'To' => [$toName !== '' ? ['Email' => $toEmail, 'Name' => $toName] : ['Email' => $toEmail]],
         'Subject' => $subject,
         'TextPart' => $text !== '' ? $text : trim(html_entity_decode(strip_tags(str_replace(['<br>', '</p>', '</tr>'], "\n", $html)))),
         'HTMLPart' => $html,
@@ -84,6 +84,16 @@ function emailResetCode(string $to, string $name, string $code): bool {
         "Hi $name,\n\nYour LASSO password reset code is: $code\n\nIt expires in 10 minutes and can only be used once.\nIf you did not ask to reset your password, ignore this email.");
 }
 
+function emailVerifyCode(string $to, string $code): bool {
+    $html = emailLayout('Verify your school email',
+        '<p>Hi,</p><p>Use this code to verify your email and continue creating your LASSO account:</p>'
+        . '<p style="font-size:32px;font-weight:700;letter-spacing:8px;margin:20px 0;color:#0f172a;">' . emailEsc($code) . '</p>'
+        . '<p>The code expires in <b>10 minutes</b> and can only be used once.</p>'
+        . '<p>If you did not try to register on LASSO, you can ignore this email.</p>');
+    return sendEmail($to, '', 'Your LASSO verification code: ' . $code, $html,
+        "Your LASSO verification code is: $code\n\nIt expires in 10 minutes and can only be used once.\nIf you did not try to register on LASSO, ignore this email.");
+}
+
 function emailPasswordChanged(string $to, string $name): bool {
     $html = emailLayout('Your password was changed',
         '<p>Hi ' . emailEsc($name) . ',</p><p>The password for your LASSO account was just reset.</p>'
@@ -107,7 +117,7 @@ function emailReceiptApproved(string $to, string $name, string $billingCode, str
 
 function emailReceiptRejected(string $to, string $name, string $billingCode, string $orNumber, string $reason): bool {
     $html = emailLayout('Your receipt needs another look',
-        '<p>Hi ' . emailEsc($name) . ',</p><p>Your official receipt <b>' . emailEsc($orNumber) . '</b> for billing <b>' . emailEsc($billingCode) . '</b> was not approved.</p>'
+        '<p>Hi ' . emailEsc($name) . ',</p><p>Your official receipt' . ($orNumber !== '' ? ' <b>' . emailEsc($orNumber) . '</b>' : '') . ' for billing <b>' . emailEsc($billingCode) . '</b> was not approved.</p>'
         . '<p><b>Reason:</b> ' . nl2br(emailEsc($reason)) . '</p><p>Please submit a corrected receipt from your Cart page.</p>',
         'Go to my Cart', APP_URL . '/student/cart.html');
     return sendEmail($to, $name, 'Receipt not approved — action needed', $html);
