@@ -4,9 +4,9 @@
 // Credentials come from environment variables, set in Render's
 // dashboard (Settings -> Environment). Never hardcode them here.
 //
-// Get these values from Supabase: Project Settings -> Database
-// -> Connection string -> "Session pooler" (recommended for
-// long-running app servers) or "Transaction pooler".
+// Get these values from Supabase: Connect -> "Transaction pooler"
+// (handles many more simultaneous users; "Session pooler" on 5432
+// also works with this file).
 //   SUPABASE_DB_HOST     e.g. aws-0-ap-southeast-1.pooler.supabase.com
 //   SUPABASE_DB_PORT     e.g. 5432 (session) or 6543 (transaction)
 //   SUPABASE_DB_NAME     usually "postgres"
@@ -30,7 +30,11 @@ function getDB(): PDO {
                 [
                     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_EMULATE_PREPARES => false,
+                    // true = PHP fills in the ? values itself. Required for Supabase's
+                    // transaction pooler (port 6543), which can hand each query to a
+                    // different database connection, where server-side prepared
+                    // statements would go missing. Values are still safely escaped.
+                    PDO::ATTR_EMULATE_PREPARES => true,
                 ]
             );
         } catch (PDOException $e) {

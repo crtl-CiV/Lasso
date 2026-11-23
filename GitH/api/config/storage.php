@@ -152,3 +152,19 @@ function deleteStorageObjects(string $bucket, array $paths): bool {
 
     return $httpCode >= 200 && $httpCode < 300;
 }
+
+/** Small JPEG copy of a page image (240 px wide) for the reader's sidebar. Null if GD is unavailable. */
+function makeThumbJpeg(string $bytes, int $width = 240): ?string {
+    if (!function_exists('imagecreatefromstring')) return null;
+    $src = @imagecreatefromstring($bytes);
+    if (!$src) return null;
+    $w = imagesx($src); $h = imagesy($src);
+    if ($w <= $width) { $width = $w; }
+    $height = max(1, (int)round($h * $width / $w));
+    $dst = imagecreatetruecolor($width, $height);
+    imagefill($dst, 0, 0, imagecolorallocate($dst, 255, 255, 255));   // white behind transparent PNGs
+    imagecopyresampled($dst, $src, 0, 0, 0, 0, $width, $height, $w, $h);
+    ob_start(); imagejpeg($dst, null, 72); $out = ob_get_clean();
+    imagedestroy($src); imagedestroy($dst);
+    return $out;
+}

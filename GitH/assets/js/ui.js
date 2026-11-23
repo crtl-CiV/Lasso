@@ -158,7 +158,7 @@ function openPageReader(opts) {
     <div class="reader-body">
       <nav class="reader-thumbs" aria-label="Pages">
         ${pages.map(p => `<button type="button" class="rthumb" data-page="${p}" aria-label="Go to page ${p}">
-          <span class="rthumb-img"><img loading="lazy" alt="" data-src="${src(p)}"></span><span class="rthumb-no">${p}</span></button>`).join('')}
+          <span class="rthumb-img"><img loading="lazy" alt="" data-src="${src(p)}&thumb=1"></span><span class="rthumb-no">${p}</span></button>`).join('')}
       </nav>
       <div class="reader-stage protected" id="rdStage">
         ${pages.map(p => `<figure class="rpage" id="rp-${p}" data-page="${p}"><img class="viewer-page-img protected" alt="Page ${p}" data-src="${src(p)}"><figcaption>Page ${p}</figcaption></figure>`).join('')}

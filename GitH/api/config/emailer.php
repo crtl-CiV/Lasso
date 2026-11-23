@@ -94,6 +94,16 @@ function emailVerifyCode(string $to, string $code): bool {
         "Your LASSO verification code is: $code\n\nIt expires in 10 minutes and can only be used once.\nIf you did not try to register on LASSO, ignore this email.");
 }
 
+function emailAdminCode(string $to, string $name, string $code, string $creator): bool {
+    $html = emailLayout('Confirm your new LASSO admin account',
+        '<p>Hi ' . emailEsc($name) . ',</p><p>' . ($creator !== '' ? emailEsc($creator) : 'A LASSO administrator') . ' is creating a LASSO <b>administrator account</b> for you. Give them this code to confirm that this email is yours:</p>'
+        . '<p style="font-size:32px;font-weight:700;letter-spacing:8px;margin:20px 0;color:#0f172a;">' . emailEsc($code) . '</p>'
+        . '<p>The code expires in <b>10 minutes</b> and can only be used once.</p>'
+        . '<p>If you were not expecting this, do not share the code. No account is created without it.</p>');
+    return sendEmail($to, $name, 'LASSO admin account code: ' . $code, $html,
+        "Hi $name,\n\n" . ($creator !== '' ? $creator : 'A LASSO administrator') . " is creating a LASSO administrator account for you.\nGive them this code to confirm your email: $code\n\nIt expires in 10 minutes and can only be used once. If you were not expecting this, do not share the code.");
+}
+
 function emailPasswordChanged(string $to, string $name): bool {
     $html = emailLayout('Your password was changed',
         '<p>Hi ' . emailEsc($name) . ',</p><p>The password for your LASSO account was just reset.</p>'

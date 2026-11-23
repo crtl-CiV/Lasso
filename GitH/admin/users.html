@@ -217,41 +217,101 @@ async function userAction(id, type, action, extra) {
 }
 
 /* ---------------- register admin ---------------- */
-function openNewAdminModal() {
+/* ---------- Register admin: form → email code pop-up → account created ---------- */
+let pendingAdmin = null, adminCodeTimer = null;
+function openNewAdminModal(prefill) {
+  const v = prefill || {};
   openModal(`
-    ${modalHead('Register admin', 'Create another administrator account.')}
-    <form id="newAdminForm">
+    ${modalHead('Register admin', 'Create another administrator account. A code will be emailed to the new admin to confirm their email.')}
+    <form id="newAdminForm" novalidate>
       <div class="form-row">
-        <div><label>Admin ID</label><input type="text" id="na_id" required></div>
-        <div><label>Full name</label><input type="text" id="na_name" required></div>
+        <div><label for="na_id">Admin ID</label><input type="text" id="na_id" required value="${esc(v.admin_id || '')}"></div>
+        <div><label for="na_name">Full name</label><input type="text" id="na_name" required value="${esc(v.full_name || '')}"></div>
       </div>
-      <label>Email</label><input type="email" id="na_email" required placeholder="name@example.com">
+      <label for="na_email">Email</label><input type="email" id="na_email" required placeholder="name@example.com" value="${esc(v.email || '')}">
+      <div class="field-hint">Any email the new admin can open — it doesn't need to be a school email.</div>
+      <label for="na_position">Position</label>
+      <select id="na_position" required><option value="">Select position</option>${ADMIN_POSITIONS.map(p => `<option ${p === v.position ? 'selected' : ''}>${p}</option>`).join('')}</select>
       <div class="form-row">
-        <div><label>Position</label><select id="na_position" required><option value="">Select position</option>${ADMIN_POSITIONS.map(p => `<option>${p}</option>`).join('')}</select></div>
-        <div><label>Password</label><input type="password" id="na_password" required autocomplete="new-password"></div>
+        <div><label for="na_password">Password</label><input type="password" id="na_password" required autocomplete="new-password" placeholder="Create a password"></div>
+        <div><label for="na_password2">Confirm password</label><input type="password" id="na_password2" required autocomplete="new-password" placeholder="Type it again"></div>
       </div>
       <ul data-pw-rules-for="na_password"></ul>
       <div id="naAlert"></div>
       <div style="display:flex; gap:10px; margin-top:18px;">
         <button type="button" class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary" style="flex:1;">Create</button>
+        <button type="submit" class="btn btn-primary" style="flex:1;" id="naSubmit">Send code &amp; continue</button>
       </div>
     </form>`);
+  if (v.password) { document.getElementById('na_password').value = v.password; document.getElementById('na_password2').value = v.password_confirm || ''; }
+  document.getElementById('newAdminForm').addEventListener('input', (e) => { document.getElementById('naAlert').innerHTML = ''; e.target.classList.remove('is-error'); });
   document.getElementById('newAdminForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!passwordOk(document.getElementById('na_password').value)) {
-      document.getElementById('naAlert').innerHTML = '<div class="alert alert-error">The password does not meet all the requirements yet.</div>'; return;
+    const $ = id => document.getElementById(id), alertBox = $('naAlert');
+    const fail = (msg, el) => { alertBox.innerHTML = `<div class="alert alert-error">${esc(msg)}</div>`; if (el) { el.classList.add('is-error'); el.focus(); } };
+    e.target.querySelectorAll('.is-error').forEach(x => x.classList.remove('is-error'));
+    const data = {
+      admin_id: $('na_id').value.trim(), full_name: $('na_name').value.trim(), email: $('na_email').value.trim().toLowerCase(),
+      position: $('na_position').value, password: $('na_password').value, password_confirm: $('na_password2').value,
+    };
+    for (const [id, key] of [['na_id', 'admin_id'], ['na_name', 'full_name'], ['na_email', 'email'], ['na_position', 'position']]) {
+      if (!data[key]) return fail('Please fill out every field.', $(id));
     }
-    const r = await apiPost('/admin/register_admin.php', {
-      admin_id: document.getElementById('na_id').value.trim(), email: document.getElementById('na_email').value.trim(),
-      full_name: document.getElementById('na_name').value.trim(), position: document.getElementById('na_position').value,
-      password: document.getElementById('na_password').value,
-    });
-    if (r.success) {
-      toast(r.message, 'success'); closeModal(); tab = 'admins';
-      document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('active', x.dataset.tab === 'admins'));
-      loadAll();
-    } else document.getElementById('naAlert').innerHTML = `<div class="alert alert-error">${esc(r.message)}</div>`;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email)) return fail('Please enter a valid email address.', $('na_email'));
+    if (!passwordOk(data.password)) return fail('The password does not meet all the requirements yet.', $('na_password'));
+    if (data.password !== data.password_confirm) return fail('The two passwords do not match.', $('na_password2'));
+    const btn = $('naSubmit'); btn.disabled = true; btn.textContent = 'Sending code…';
+    const r = await apiPost('/admin/admin_send_code.php', data);
+    btn.disabled = false; btn.innerHTML = 'Send code &amp; continue';
+    const wait = /wait (\d+) seconds/.exec(r.message || '');
+    if (!r.success && !wait) return fail(r.message);
+    pendingAdmin = data;
+    openAdminCodeModal(wait ? +wait[1] : 60, wait ? r.message : '');
+  });
+}
+
+/** The pop-up that demands the emailed code. Nothing is created unless the right code is entered. */
+function openAdminCodeModal(cooldown, note) {
+  const d = pendingAdmin;
+  openModal(`
+    ${modalHead('Enter the verification code', `We sent a 6-digit code to <b>${esc(d.email)}</b>. Ask the new admin for it.`)}
+    <label for="na_code">6-digit code</label>
+    <input type="text" id="na_code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:6px; font-size:20px; font-weight:600; max-width:220px;">
+    <p class="small" style="margin-top:10px;"><button type="button" class="link-btn" id="naResend">Resend code</button> · <button type="button" class="link-btn" id="naEdit">Change details</button></p>
+    <p class="small muted">The code expires in 10 minutes. The account is <b>not created</b> until the correct code is entered.</p>
+    <div id="naCodeAlert">${note ? `<div class="alert alert-info">${esc(note)}</div>` : ''}</div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-outline" id="naCancel">Cancel</button>
+      <button type="button" class="btn btn-primary" id="naCreate">Verify &amp; create account</button>
+    </div>`);
+  const $ = id => document.getElementById(id), box = $('naCodeAlert');
+  const startCooldown = (sec) => {
+    clearInterval(adminCodeTimer); let left = sec; const b = $('naResend');
+    const paint = () => { if (!document.body.contains(b)) return clearInterval(adminCodeTimer); b.disabled = left > 0; b.textContent = left > 0 ? `Resend code (${left}s)` : 'Resend code'; };
+    paint(); adminCodeTimer = setInterval(() => { left--; paint(); if (left <= 0) clearInterval(adminCodeTimer); }, 1000);
+  };
+  startCooldown(cooldown);
+  $('na_code').focus();
+  $('na_code').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('naCreate').click(); } });
+  $('naCancel').addEventListener('click', () => { clearInterval(adminCodeTimer); pendingAdmin = null; closeModal(); toast('No admin account was created.', 'info'); });
+  $('naEdit').addEventListener('click', () => { clearInterval(adminCodeTimer); openNewAdminModal(d); });
+  $('naResend').addEventListener('click', async () => {
+    const r = await apiPost('/admin/admin_send_code.php', d);
+    box.innerHTML = `<div class="alert alert-${r.success ? 'success' : 'error'}">${esc(r.success ? 'A new code was sent. Only the newest code works.' : r.message)}</div>`;
+    const wait = /wait (\d+) seconds/.exec(r.message || '');
+    if (r.success) startCooldown(60); else if (wait) startCooldown(+wait[1]);
+  });
+  $('naCreate').addEventListener('click', async (e) => {
+    const btn = e.currentTarget, code = $('na_code').value.trim();
+    if (!/^\d{6}$/.test(code)) { box.innerHTML = '<div class="alert alert-error">Enter the 6-digit code from the email.</div>'; $('na_code').focus(); return; }
+    if (btn.disabled) return;
+    btn.disabled = true; btn.textContent = 'Creating…';
+    const r = await apiPost('/admin/register_admin.php', { ...d, code });
+    if (!r.success) { btn.disabled = false; btn.innerHTML = 'Verify &amp; create account'; box.innerHTML = `<div class="alert alert-error">${esc(r.message)}</div>`; return; }
+    clearInterval(adminCodeTimer); pendingAdmin = null; closeModal();
+    toast(r.message, 'success'); tab = 'admins';
+    document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('active', x.dataset.tab === 'admins'));
+    loadAll();
   });
 }
 

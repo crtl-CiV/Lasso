@@ -32,13 +32,25 @@ if (!$subscribed) {
     respond(false, 'Page out of range.', 404);
 }
 
-// File naming convention: {material_id}/page_{n}.jpg (in the private bucket)
-$extensions = ['jpg', 'png', 'webp'];
+// File naming convention: {material_id}/page_{n}.jpg (in the private bucket).
+// ?thumb=1 serves a small copy for the reader's page sidebar: {material_id}/thumb_{n}.jpg,
+// made the first time it's asked for and kept in storage after that.
+$wantThumb = !empty($_GET['thumb']);
 $result = null;
-foreach ($extensions as $ext) {
-    $objectPath = $materialId . '/page_' . $page . '.' . $ext;
-    $result = downloadFromStorage(STORAGE_MATERIALS_BUCKET, $objectPath);
-    if ($result) break;
+if ($wantThumb) $result = downloadFromStorage(STORAGE_MATERIALS_BUCKET, $materialId . '/thumb_' . $page . '.jpg');
+
+if (!$result) {
+    foreach (['jpg', 'png', 'webp'] as $ext) {
+        $result = downloadFromStorage(STORAGE_MATERIALS_BUCKET, $materialId . '/page_' . $page . '.' . $ext);
+        if ($result) break;
+    }
+    if ($result && $wantThumb && ($small = makeThumbJpeg($result[0]))) {
+        $tmp = tempnam(sys_get_temp_dir(), 'th');
+        file_put_contents($tmp, $small);
+        uploadToStorage(STORAGE_MATERIALS_BUCKET, $materialId . '/thumb_' . $page . '.jpg', $tmp, 'image/jpeg');   // best effort
+        @unlink($tmp);
+        $result = [$small, 'image/jpeg'];
+    }
 }
 
 if (!$result) {
@@ -51,10 +63,12 @@ if (!$result) {
 
 // Reading progress is recorded separately (mark_read.php), after a page has been on screen for ~2 seconds.
 
-// Anti-piracy headers: no caching, inline only, no content-disposition download
+// Kept only in this student's own browser for up to an hour ("private": never in shared caches),
+// so scrolling back or reopening a material doesn't download every page again.
+// Still shown inline only, never offered as a download.
 header('Content-Type: ' . $fileMime);
-header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-header('Pragma: no-cache');
+header('Cache-Control: private, max-age=3600');
+header('Vary: Cookie');
 header('X-Frame-Options: SAMEORIGIN');
 header('Content-Disposition: inline');
 echo $fileBytes;

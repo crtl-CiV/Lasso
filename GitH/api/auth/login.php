@@ -9,7 +9,7 @@ require_once __DIR__ . '/../config/bootstrap.php';
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(false, 'Invalid request method.', 405);
 
 $in = jsonInput();
-$email    = trim($in['identifier'] ?? $in['email'] ?? '');
+$email    = strtolower(trim($in['identifier'] ?? $in['email'] ?? ''));
 $password = (string)($in['password'] ?? '');
 
 if (!$email || !$password) respond(false, 'Please enter your credentials.', 422);
@@ -17,7 +17,7 @@ if (!$email || !$password) respond(false, 'Please enter your credentials.', 422)
 $db = getDB();
 
 // Check students first (by university email)
-$stmt = $db->prepare('SELECT * FROM students WHERE university_email = ? LIMIT 1');
+$stmt = $db->prepare('SELECT * FROM students WHERE LOWER(university_email) = ? LIMIT 1');
 $stmt->execute([$email]);
 $user = $stmt->fetch();
 if ($user) {
@@ -36,7 +36,7 @@ if ($user) {
 }
 
 // Not a student — check administrators (by email)
-$stmt = $db->prepare('SELECT * FROM administrators WHERE email = ? LIMIT 1');
+$stmt = $db->prepare('SELECT * FROM administrators WHERE LOWER(email) = ? LIMIT 1');
 $stmt->execute([$email]);
 $user = $stmt->fetch();
 if ($user) {
