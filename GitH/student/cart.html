@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cart — LASSO</title>
+<link rel="icon" type="image/svg+xml" href="/assets/img/logo-mark.svg">
 <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
@@ -51,6 +52,7 @@
 
 <script src="/assets/js/api.js"></script>
 <script src="/assets/js/ui.js"></script>
+<script src="/assets/js/statement.js"></script>
 <script>
 let historyCache = [], showAllHistory = false;
 const HISTORY_LIMIT = 5;
@@ -200,7 +202,7 @@ function showBillingModal(b, isFresh) {
       ? `<div class="alert alert-info">Print this statement and pay at the school cashier. Then submit the official receipt (OR) on this page — an administrator will validate it and unlock your materials.</div>`
       : `<div class="alert alert-info">Reprinted copy of a previously generated billing statement.</div>`}
     <div style="display:flex; gap:10px; margin-top:14px;">
-      <button class="btn btn-outline" style="flex:1;" onclick="window.print()">${icon('print', 16)} Print</button>
+      <button class="btn btn-outline" style="flex:1;" onclick="printBillingStatement('${esc(b.billing_code)}', this)">${icon('print', 16)} Print statement</button>
       <button class="btn btn-primary" style="flex:1;" onclick="closeModal(); loadPending(); loadCart();">Done</button>
     </div>`);
 }
@@ -231,7 +233,7 @@ function renderHistory() {
       <td>${esc(b.semester)}, AY ${esc(b.academic_year)}</td>
       <td>${peso(b.total_amount)}</td>
       <td>${st}</td>
-      <td class="text-right">${b.has_receipt ? `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${esc(b.billing_code)}')">${icon('eye', 16)} Receipt</button>` : ''}<button class="btn btn-ghost btn-sm" onclick="printBilling(${idx})">${icon('print', 16)} Print</button></td>
+      <td class="text-right">${b.has_receipt ? `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${esc(b.billing_code)}')">${icon('eye', 16)} Receipt</button>` : ''}<button class="btn btn-ghost btn-sm" onclick="printBillingStatement('${esc(b.billing_code)}', this)">${icon('print', 16)} Print</button></td>
     </tr>`;
   }).join('');
   const more = historyCache.length - HISTORY_LIMIT;
@@ -240,11 +242,6 @@ function renderHistory() {
 }
 document.getElementById('historyToggle').addEventListener('click', () => { showAllHistory = !showAllHistory; renderHistory(); });
 
-function printBilling(idx) {
-  const b = historyCache[idx];
-  showBillingModal({ billing_code: b.billing_code, student_name: b.student_name, student_id_number: b.student_id_number, items: b.items,
-    total: b.total_amount, semester: b.semester, academic_year: b.academic_year, date: fmtDate(b.created_at) }, false);
-}
 
 init();
 </script>

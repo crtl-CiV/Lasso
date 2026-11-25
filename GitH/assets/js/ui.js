@@ -14,7 +14,7 @@ function initials(name) {
   const p = String(name || '?').trim().split(/\s+/).filter(Boolean);
   return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase();
 }
-function brandHtml(href) { return `<a class="brand" href="${href}"><span class="brand-mark">L</span>LASSO</a>`; }
+function brandHtml(href) { return `<a class="brand" href="${href}"><img class="brand-logo" src="/assets/img/logo-mark.svg" alt="" width="34" height="34">LASSO</a>`; }
 
 /* ---------------- student shell: top navigation ---------------- */
 function renderStudentShell(active) {

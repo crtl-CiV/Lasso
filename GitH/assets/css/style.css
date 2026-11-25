@@ -170,6 +170,7 @@ td { padding: 14px 16px; border-top: 1px solid var(--slate-200); vertical-align:
 /* ---------- student shell (top navigation) ---------- */
 .topnav { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 8px; height: 69px; padding: 0 48px; background: var(--surface); border-bottom: 1px solid var(--slate-200); }
 .brand { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; color: var(--slate-900); text-decoration: none; letter-spacing: -.3px; }
+.brand-logo { width: 34px; height: 34px; border-radius: 9px; display: block; flex-shrink: 0; }
 .brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9px; background: var(--indigo-600); color: #fff; font-size: 18px; font-weight: 700; }
 .topnav-links { display: flex; align-items: center; gap: 4px; margin-left: 28px; }
 .navlink { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: var(--r-md); color: var(--slate-700); font: 500 14px 'Inter', sans-serif; text-decoration: none; border: none; background: none; cursor: pointer; }

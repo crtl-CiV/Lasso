@@ -60,7 +60,7 @@ function emailLayout(string $heading, string $bodyHtml, ?string $buttonText = nu
     return '<!DOCTYPE html><html><body style="margin:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">'
         . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 12px;"><tr><td align="center">'
         . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:12px;padding:32px;">'
-        . '<tr><td style="font-size:20px;font-weight:700;color:#4f46e5;padding-bottom:20px;">LASSO</td></tr>'
+        . '<tr><td style="padding-bottom:20px;"><img src="' . APP_URL . '/assets/img/logo-email.png" width="32" height="32" alt="" style="vertical-align:middle;border:0;border-radius:8px;"> <span style="font-size:20px;font-weight:700;color:#4f46e5;vertical-align:middle;">LASSO</span></td></tr>'
         . '<tr><td><h1 style="font-size:20px;margin:0 0 16px;">' . htmlspecialchars($heading) . '</h1>'
         . '<div style="font-size:15px;line-height:1.6;color:#334155;">' . $bodyHtml . '</div>' . $btn . '</td></tr>'
         . '<tr><td style="padding-top:28px;border-top:1px solid #e2e8f0;margin-top:28px;font-size:12px;color:#64748b;">'
