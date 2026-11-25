@@ -27,6 +27,9 @@
 </div>
 <script src="/assets/js/api.js"></script>
 <script>
+if (new URLSearchParams(location.search).get('loggedout') === 'device') {
+  document.getElementById('alertBox').innerHTML = '<div class="alert alert-info">Your account was logged in on another device, so you were logged out here. Log in again to continue.</div>';
+}
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const box = document.getElementById('alertBox'), btn = document.getElementById('loginBtn');

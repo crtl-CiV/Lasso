@@ -14,7 +14,7 @@ if (!$mat) respond(false, 'Material not available.', 404);
 
 // Year + semester exclusivity
 if (!materialOpenTo($mat, eligibilityBits($db, (int)$user['id']))) {
-    respond(false, 'This material is not available for your year level or the current semester.', 403);
+    respond(false, 'This material is not available for your course, year level or the current semester.', 403);
 }
 
 $stmt = $db->prepare("SELECT id FROM subscriptions WHERE student_id=? AND material_id=? AND status='active' AND expiry_date >= CURRENT_DATE");

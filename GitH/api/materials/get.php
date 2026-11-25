@@ -6,7 +6,7 @@ $db = getDB();
 $id = (int)($_GET['id'] ?? 0);
 if (!$id) respond(false, 'Material not specified.', 422);
 
-$stmt = $db->prepare("SELECT m.*, d.name AS department_name, p.name AS program_name, au.name AS author_name
+$stmt = $db->prepare("SELECT m.*, d.name AS department_name, p.name AS program_name, au.name AS author_name, " . COURSES_JSON_SQL . " AS courses
                        FROM instructional_materials m
                        LEFT JOIN college_departments d ON d.id = m.department_id
                        LEFT JOIN college_programs p ON p.id = m.program_id
@@ -22,7 +22,7 @@ $subscribed = (bool)$stmt->fetch();
 
 // Year + semester exclusivity. Students who currently hold an active subscription keep access to it.
 if (!$subscribed && !materialOpenTo($m, eligibilityBits($db, (int)$user['id']))) {
-    respond(false, 'This material is not available for your year level or the current semester.', 403);
+    respond(false, 'This material is not available for your course, year level or the current semester.', 403);
 }
 
 $nonBody = json_decode($m['non_body_pages'] ?? '[]', true) ?: [];
@@ -42,6 +42,7 @@ if ($subscribed) {
 
 unset($m['file_path'], $m['non_body_pages'], $m['preview_excluded_pages']);
 $m['is_subscribed'] = $subscribed;
+$m['courses'] = json_decode($m['courses'] ?? '[]', true) ?: [];
 $m['body_page_count'] = count($bodyPages);
 $m['accessible_pages'] = $accessiblePages;
 

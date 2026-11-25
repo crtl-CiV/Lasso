@@ -24,15 +24,15 @@ if ($user) {
     if ($user['status'] === 'trashed' || !password_verify($password, $user['password_hash'])) {
         respond(false, 'Invalid credentials.', 401);
     }
-    $_SESSION['user'] = [
+    $me = startSession('students', (int)$user['id'], [
         'id' => $user['id'], 'role' => 'student',
         'student_id_number' => $user['student_id_number'],
         'full_name' => $user['full_name'], 'university_email' => $user['university_email'],
         'department_id' => $user['department_id'], 'program_id' => $user['program_id'],
         'year_level' => $user['year_level'], 'section' => $user['section'],
         'profile_photo' => $user['profile_photo'],
-    ];
-    respond(true, ['user' => $_SESSION['user']]);
+    ]);
+    respond(true, ['user' => $me]);
 }
 
 // Not a student — check administrators (by email)
@@ -43,12 +43,12 @@ if ($user) {
     if ($user['status'] === 'trashed' || !password_verify($password, $user['password_hash'])) {
         respond(false, 'Invalid credentials.', 401);
     }
-    $_SESSION['user'] = [
+    $me = startSession('administrators', (int)$user['id'], [
         'id' => $user['id'], 'role' => $user['role'], // 'admin'
         'admin_id' => $user['admin_id'], 'email' => $user['email'],
         'full_name' => $user['full_name'], 'position' => $user['position'],
-    ];
-    respond(true, ['user' => $_SESSION['user']]);
+    ]);
+    respond(true, ['user' => $me]);
 }
 
 respond(false, 'Invalid credentials.', 401);

@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/bootstrap.php';
-if (empty($_SESSION['user'])) respond(false, 'Not logged in.', 401);
+if (empty($_SESSION['user'])) respondNotLoggedIn('Not logged in.');
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(false, 'Invalid request method.', 405);
 
 $in = jsonInput();

@@ -88,8 +88,7 @@ if ($materialId > 0) {
 // ---------------------------------------------------------
 $title = trim($_POST['title'] ?? '');
 $description = trim($_POST['description'] ?? '');
-$departmentId = (int)($_POST['department_id'] ?? 0) ?: null;
-$programId = (int)($_POST['program_id'] ?? 0) ?: null;
+$programIds = parseProgramIds($db, $_POST['program_ids'] ?? 'all');   // [] = every course
 $yearMask = tagMask($_POST['year_levels'] ?? '', 5);
 $semesterMask = tagMask($_POST['semesters'] ?? '', 2);
 $price = (float)($_POST['price'] ?? 0);
@@ -128,8 +127,9 @@ $stmt = $db->prepare("INSERT INTO instructional_materials
     (material_code, title, description, department_id, program_id, year_level, year_mask, semester_mask, price, author_id, total_pages, non_body_pages, preview_excluded_pages, status, uploaded_by, subject_code)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'draft', ?, ?)
     RETURNING id");
-$stmt->execute([$code, $title, $description, $departmentId, $programId, $yearLevel, $yearMask, $semesterMask, $price, $authorId, json_encode($nonBodyPages), '[]', $admin['id'], $subjectCode]);
+$stmt->execute([$code, $title, $description, null, null, $yearLevel, $yearMask, $semesterMask, $price, $authorId, json_encode($nonBodyPages), '[]', $admin['id'], $subjectCode]);
 $materialId = (int)$stmt->fetchColumn();
+saveMaterialPrograms($db, $materialId, $programIds);
 
 $coverPath = saveCover($materialId);
 $savedCount = $hasPagesNow ? savePagesBatch($materialId, 0) : 0;

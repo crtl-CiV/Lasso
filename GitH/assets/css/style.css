@@ -128,6 +128,7 @@ textarea { resize: vertical; }
 .pw-rules li.ok { color: var(--green-800); }
 .pw-rules li.ok::before { content: '✓'; font-weight: 700; }
 @media (max-width: 560px) { .pw-rules { grid-template-columns: 1fr; } }
+.pw-rules.pw-rules-1col { grid-template-columns: 1fr; }
 
 /* ---------- alerts ---------- */
 .alert { padding: 12px 14px; border-radius: var(--r-md); font-size: 13px; font-weight: 500; margin: 10px 0; }
@@ -411,3 +412,14 @@ body.reg { background: var(--slate-50); }
 @media (max-width: 520px) { .edit-cover { flex-direction: column; } .edit-cover-now { width: 100%; } }
 
 .reader-end { color: #e2e8f0; padding: 12px 0 32px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+
+/* ---------- "Visible to" course picker (admin materials) ---------- */
+.course-picker { border: 1px solid var(--slate-200); border-radius: 10px; padding: 10px 12px; margin-top: 4px; max-height: 280px; overflow-y: auto; }
+.course-picker label { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 400; cursor: pointer; }
+.course-picker input[type=checkbox] { width: auto; margin: 0; }
+.cp-all { padding-bottom: 8px; border-bottom: 1px solid var(--slate-200); margin-bottom: 6px !important; }
+.cp-depts.cp-off { opacity: .45; }
+.cp-dept { padding: 4px 0; }
+.cp-dept-head { font-weight: 600 !important; }
+.cp-courses { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; padding: 4px 0 4px 26px; font-size: 14px; }
+@media (max-width: 560px) { .cp-courses { grid-template-columns: 1fr; } }

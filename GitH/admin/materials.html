@@ -92,7 +92,7 @@ function materialAdminCard(m) {
       <div class="mcard-body">
         <div class="mcard-title">${esc(m.title)}</div>
         <div class="mcard-meta">${esc(m.author_name || '—')} · ${esc(m.subject_code || m.material_code)}</div>
-        <div class="tags"><span class="badge badge-info">${esc(yearMaskLabel(m.year_mask))}</span><span class="badge badge-warning">${esc(semesterMaskLabel(m.semester_mask))}</span>${statusBadge}</div>
+        <div class="tags"><span class="badge badge-info">${esc(yearMaskLabel(m.year_mask))}</span><span class="badge badge-warning">${esc(semesterMaskLabel(m.semester_mask))}</span><span class="badge badge-brand" title="${esc((m.courses || []).map(c => c.name).join(', ') || 'Every course')}">${esc(courseLabel(m.courses))}</span>${statusBadge}</div>
         <div class="mcard-meta">${m.total_pages || 0} page(s) · ${m.subscriber_count} active subscriber(s)</div>
         <div class="mcard-foot"><span class="price">${peso(m.price)}</span></div>
         <div class="mcard-actions">${actions}</div>
@@ -135,10 +135,68 @@ async function doAction(id, action, extra) {
   else toast(r.message, 'error');
 }
 
-function deptProgramOptions(selectedDept, selectedProg) {
-  const depOpts = refs.departments.map(d => `<option value="${d.id}" ${d.id==selectedDept?'selected':''}>${esc(d.name)}</option>`).join('');
-  const progOpts = refs.programs.map(p => `<option value="${p.id}" ${p.id==selectedProg?'selected':''}>${esc(p.name)}</option>`).join('');
-  return { depOpts, progOpts };
+// ---------------------------------------------------------
+// "Visible to" picker: All departments and courses, or ticked departments -> ticked courses.
+// No courses saved = every course may see the material.
+// ---------------------------------------------------------
+function coursePickerHtml(id, selectedIds) {
+  const sel = (selectedIds || []).map(Number);
+  const all = sel.length === 0;
+  const depts = refs.departments.map(d => {
+    const progs = refs.programs.filter(p => p.department_id == d.id);
+    const on = progs.some(p => sel.includes(Number(p.id)));
+    return `<div class="cp-dept">
+      <label class="cp-dept-head"><input type="checkbox" class="cp-dept-box" value="${d.id}" ${on ? 'checked' : ''} ${all ? 'disabled' : ''}> ${esc(d.name)}
+        <span class="muted small cp-count"></span></label>
+      <div class="cp-courses ${on ? '' : 'hidden'}">${progs.length ? progs.map(p => `<label class="cp-course"><input type="checkbox" class="cp-course-box" value="${p.id}" ${sel.includes(Number(p.id)) ? 'checked' : ''} ${all ? 'disabled' : ''}> ${esc(p.name)}</label>`).join('')
+        : '<span class="muted small">No courses in this department yet.</span>'}</div>
+    </div>`;
+  }).join('');
+  return `<div class="course-picker" id="${id}">
+    <label class="cp-all"><input type="checkbox" class="cp-all-box" ${all ? 'checked' : ''}> <b>All departments and courses</b></label>
+    <div class="cp-depts ${all ? 'cp-off' : ''}">${depts}</div>
+  </div>`;
+}
+
+function bindCoursePicker(id) {
+  const root = document.getElementById(id);
+  const refresh = () => root.querySelectorAll('.cp-dept').forEach(d => {
+    const boxes = [...d.querySelectorAll('.cp-course-box')], n = boxes.filter(b => b.checked).length;
+    d.querySelector('.cp-count').textContent = d.querySelector('.cp-dept-box').checked && boxes.length ? `(${n} of ${boxes.length} course${boxes.length === 1 ? '' : 's'})` : '';
+  });
+  root.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t.classList.contains('cp-all-box')) {
+      root.querySelector('.cp-depts').classList.toggle('cp-off', t.checked);
+      root.querySelectorAll('.cp-dept-box, .cp-course-box').forEach(b => { b.disabled = t.checked; });
+    } else if (t.classList.contains('cp-dept-box')) {
+      const d = t.closest('.cp-dept');
+      d.querySelector('.cp-courses').classList.toggle('hidden', !t.checked);
+      d.querySelectorAll('.cp-course-box').forEach(b => { b.checked = t.checked; });   // ticking a department pre-ticks all its courses
+    } else if (t.classList.contains('cp-course-box')) {
+      const d = t.closest('.cp-dept');
+      if (![...d.querySelectorAll('.cp-course-box')].some(b => b.checked)) {   // last course unticked -> close the department
+        d.querySelector('.cp-dept-box').checked = false; d.querySelector('.cp-courses').classList.add('hidden');
+      }
+    }
+    refresh();
+  });
+  refresh();
+}
+
+/** 'all', or the ticked course ids; null (and an error toast) when nothing is ticked. */
+function readCoursePicker(id, quiet) {
+  const root = document.getElementById(id);
+  if (root.querySelector('.cp-all-box').checked) return 'all';
+  const ids = [...root.querySelectorAll('.cp-course-box:checked')].map(b => Number(b.value));
+  if (!ids.length) { if (!quiet) toast('Tick at least one course under "Visible to", or tick "All departments and courses".', 'error'); return null; }
+  return ids;
+}
+
+/** Short label for cards: "All courses", one name, or "N courses". */
+function courseLabel(courses) {
+  if (!courses || !courses.length) return 'All courses';
+  return courses.length === 1 ? courses[0].name : `${courses.length} courses`;
 }
 
 // ---------------------------------------------------------
@@ -146,7 +204,6 @@ function deptProgramOptions(selectedDept, selectedProg) {
 // browser via pdf.js) or manual Page Images.
 // ---------------------------------------------------------
 function openUploadModal() {
-  const { depOpts, progOpts } = deptProgramOptions();
   openModal(`
     ${modalHead('Upload instructional material', 'Fill in the details, tag who may access it, then add the file.')}
     <div class="tabs" style="margin-bottom:14px;">
@@ -160,10 +217,8 @@ function openUploadModal() {
         <div><label>Subject code <span class="muted">(optional)</span></label><input type="text" id="u_subject" maxlength="30" placeholder="e.g. IT 108"></div>
       </div>
       <label>Description</label><textarea id="u_description" rows="3"></textarea>
-      <div class="form-row">
-        <div><label>Department</label><select id="u_department"><option value="">—</option>${depOpts}</select></div>
-        <div><label>Course</label><select id="u_program"><option value="">—</option>${progOpts}</select></div>
-      </div>
+      <label>Visible to <span class="req">*</span> <span class="muted">(only students in the ticked courses will see this material)</span></label>
+      ${coursePickerHtml('u_courses', [])}
       <div class="form-row">
         <div><label>Price (₱)</label><input type="number" id="u_price" min="0" step="0.01" required></div>
         <div></div>
@@ -201,6 +256,7 @@ function openUploadModal() {
       </div>
     </form>`, { wide: 680 });
   bindDropzones(document.getElementById('modalContent'));
+  bindCoursePicker('u_courses');
 
   document.getElementById('u_pdf').addEventListener('change', async (e) => {
     const f = e.target.files[0];
@@ -233,8 +289,7 @@ function commonFields() {
     author_name: document.getElementById('u_author').value.trim(),
     subject_code: document.getElementById('u_subject').value.trim(),
     description: document.getElementById('u_description').value.trim(),
-    department_id: document.getElementById('u_department').value,
-    program_id: document.getElementById('u_program').value,
+    program_ids: (ids => ids === 'all' ? 'all' : (ids ? ids.join(',') : ''))(readCoursePicker('u_courses', true)),
     year_levels: checkedTags('u_years').join(','),
     semesters: checkedTags('u_sems').join(','),
     price: document.getElementById('u_price').value,
@@ -275,6 +330,7 @@ async function handleUploadSubmit(e) {
   if (!fields.year_levels) { box.innerHTML = `<div class="alert alert-error">Tag at least one year level this material is accessible for.</div>`; return; }
   if (!fields.semesters) { box.innerHTML = `<div class="alert alert-error">Tag at least one semester this material is accessible for.</div>`; return; }
   if (!fields.author_name) { box.innerHTML = `<div class="alert alert-error">Author is required.</div>`; return; }
+  if (!fields.program_ids) { box.innerHTML = `<div class="alert alert-error">Under "Visible to", tick at least one course, or tick "All departments and courses".</div>`; return; }
 
   const submitBtn = document.getElementById('uploadSubmitBtn');
   submitBtn.disabled = true;
@@ -453,7 +509,6 @@ async function submitAddPages(materialId) {
 }
 
 function openEditModal(m) {
-  const { depOpts, progOpts } = deptProgramOptions(m.department_id, m.program_id);
   openModal(`
     ${modalHead('Edit material', esc(m.material_code))}
     <form id="editForm">
@@ -463,10 +518,8 @@ function openEditModal(m) {
         <div><label>Subject code <span class="muted">(optional)</span></label><input type="text" id="e_subject" maxlength="30" value="${esc(m.subject_code || '')}" placeholder="e.g. IT 108"></div>
       </div>
       <label>Description</label><textarea id="e_description" rows="3">${esc(m.description || '')}</textarea>
-      <div class="form-row">
-        <div><label>Department</label><select id="e_department"><option value="">—</option>${depOpts}</select></div>
-        <div><label>Course</label><select id="e_program"><option value="">—</option>${progOpts}</select></div>
-      </div>
+      <label>Visible to <span class="req">*</span> <span class="muted">(only students in the ticked courses will see this material)</span></label>
+      ${coursePickerHtml('e_courses', (m.courses || []).map(c => c.id))}
       <div class="form-row">
         <div><label>Price (₱)</label><input type="number" id="e_price" min="0" step="0.01" value="${m.price}"></div>
         <div></div>
@@ -486,9 +539,11 @@ function openEditModal(m) {
       </div>
     </form>`, { wide: 640 });
   bindDropzones(document.getElementById('modalContent'));
+  bindCoursePicker('e_courses');
 
   document.getElementById('editForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const programIds = readCoursePicker('e_courses'); if (programIds === null) return;
     const saveBtn = e.target.querySelector('button[type=submit]'); saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
     const r = await apiPost('/admin/materials_edit.php', {
       id: m.id,
@@ -496,8 +551,7 @@ function openEditModal(m) {
       author_name: document.getElementById('e_author').value.trim(),
       subject_code: document.getElementById('e_subject').value.trim(),
       description: document.getElementById('e_description').value.trim(),
-      department_id: document.getElementById('e_department').value,
-      program_id: document.getElementById('e_program').value,
+      program_ids: programIds,
       year_levels: checkedTags('e_years'),
       semesters: checkedTags('e_sems'),
       price: document.getElementById('e_price').value,

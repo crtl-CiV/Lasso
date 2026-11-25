@@ -9,9 +9,19 @@ const API_BASE = '/api';
 // appended to this to form the full image URL.
 const SUPABASE_PUBLIC_URL = 'https://rghdjktjaxatbxybtwsu.supabase.co/storage/v1/object/public/lasso-public/';
 
+/** Reads an API reply. If the account logged in on another device, goes to the login page and says why. */
+async function apiJson(res) {
+  const data = await res.json();
+  if (res.status === 401 && data && data.reason === 'replaced') {
+    window.location.href = '/index.html?loggedout=device';
+    return new Promise(() => {});   // stop the caller here; the page is leaving
+  }
+  return data;
+}
+
 async function apiGet(path) {
   const res = await fetch(API_BASE + path, { credentials: 'same-origin' });
-  return res.json();
+  return apiJson(res);
 }
 
 async function apiPost(path, body) {
@@ -21,7 +31,7 @@ async function apiPost(path, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {}),
   });
-  return res.json();
+  return apiJson(res);
 }
 
 async function apiUpload(path, formData) {
@@ -30,7 +40,7 @@ async function apiUpload(path, formData) {
     credentials: 'same-origin',
     body: formData,
   });
-  return res.json();
+  return apiJson(res);
 }
 
 /** Escapes text before it is placed into HTML. */
@@ -68,7 +78,18 @@ async function requireAuth(role) {
     window.location.href = '/index.html';
     return null;
   }
+  startSessionWatch();
   return r.user;
+}
+
+/** Checks every 30 s that this login is still the newest one; apiJson handles the logout. */
+const SESSION_CHECK_MS = 30000;
+let sessionWatch = null;
+function startSessionWatch() {
+  if (sessionWatch) return;
+  sessionWatch = setInterval(() => { apiGet('/auth/me.php').catch(() => {}); }, SESSION_CHECK_MS);
+  // Coming back to a tab that sat in the background: check right away
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) apiGet('/auth/me.php').catch(() => {}); });
 }
 
 // ---------- Year level / semester tags (materials are tagged, students are matched against them) ----------

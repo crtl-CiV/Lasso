@@ -15,7 +15,7 @@ if (!$items) respond(false, 'Your cart is empty.', 422);
 $bits = eligibilityBits($db, (int)$user['id']);
 $closed = array_filter($items, fn($it) => $it['status'] !== 'published' || !materialOpenTo($it, $bits));
 if ($closed) {
-    respond(false, 'No longer available for your year level or this semester: ' . implode(', ', array_column($closed, 'title')) . '. Please remove them from your cart.', 409);
+    respond(false, 'No longer available for your course, year level or this semester: ' . implode(', ', array_column($closed, 'title')) . '. Please remove them from your cart.', 409);
 }
 // The same material must not sit in two unpaid billings (the second payment would be wasted)
 $st = $db->prepare("SELECT m.title, b.billing_code FROM billing_statement_items bi

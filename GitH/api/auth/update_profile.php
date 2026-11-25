@@ -31,4 +31,5 @@ if ($photoPath) {
 $_SESSION['user']['full_name'] = $fullName;
 $_SESSION['user']['section'] = $section;
 
-respond(true, ['user' => $_SESSION['user']]);
+$me = $_SESSION['user']; unset($me['session_token']);
+respond(true, ['user' => $me]);

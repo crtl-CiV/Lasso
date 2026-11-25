@@ -4,7 +4,7 @@ requireAdmin();
 $db = getDB();
 
 $status = $_GET['status'] ?? 'all'; // 'published' | 'draft' | 'trashed' | 'all'
-$sql = "SELECT m.*, d.name AS department_name, p.name AS program_name, au.name AS author_name,
+$sql = "SELECT m.*, d.name AS department_name, p.name AS program_name, au.name AS author_name, " . COURSES_JSON_SQL . " AS courses,
                (SELECT COUNT(*) FROM subscriptions s WHERE s.material_id = m.id AND s.status='active' AND s.expiry_date >= CURRENT_DATE) AS subscriber_count
         FROM instructional_materials m
         LEFT JOIN college_departments d ON d.id = m.department_id
@@ -15,4 +15,7 @@ if ($status !== 'all') { $sql .= " WHERE m.status = ?"; $params[] = $status; }
 $sql .= " ORDER BY m.created_at DESC";
 $stmt = $db->prepare($sql);
 $stmt->execute($params);
-respond(true, ['materials' => $stmt->fetchAll()]);
+$rows = $stmt->fetchAll();
+foreach ($rows as &$r) $r['courses'] = json_decode($r['courses'] ?? '[]', true) ?: [];
+unset($r);
+respond(true, ['materials' => $rows]);

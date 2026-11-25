@@ -31,8 +31,8 @@ if (isset($in['semesters'])) {
     if (!$sm) respond(false, 'Please tag at least one semester.', 422);
     $fields[] = "semester_mask = ?"; $params[] = $sm;
 }
-if (isset($in['department_id'])) { $fields[] = "department_id = ?"; $params[] = (int)$in['department_id'] ?: null; }
-if (isset($in['program_id'])) { $fields[] = "program_id = ?"; $params[] = (int)$in['program_id'] ?: null; }
+$programIds = array_key_exists('program_ids', $in) ? parseProgramIds($db, $in['program_ids']) : null;   // null = leave as is
+if ($programIds !== null) { $fields[] = "department_id = NULL"; $fields[] = "program_id = NULL"; }
 if (isset($in['non_body_pages'])) { $fields[] = "non_body_pages = ?"; $params[] = json_encode($in['non_body_pages']); }
 if (isset($in['author_name']) && trim($in['author_name']) !== '') {
     $authorName = trim($in['author_name']);
@@ -51,7 +51,10 @@ if (isset($in['status']) && in_array($in['status'], ['draft','published'], true)
 if (!$fields) respond(false, 'Nothing to update.', 422);
 
 $params[] = $id;
+$db->beginTransaction();
 $stmt = $db->prepare("UPDATE instructional_materials SET " . implode(', ', $fields) . " WHERE id = ?");
 $stmt->execute($params);
+if ($programIds !== null) saveMaterialPrograms($db, $id, $programIds);
+$db->commit();
 
 respond(true, ['message' => 'Material updated successfully.']);

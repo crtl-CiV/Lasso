@@ -127,7 +127,7 @@ async function openMaterial(id) {
   openModal(`
     ${modalHead(esc(m.title), `${esc(m.author_name || 'Unknown author')} · ${esc(m.subject_code || m.material_code)}`)}
     <div class="tags" style="margin-bottom:12px;"><span class="badge badge-info">${esc(yearMaskLabel(m.year_mask))}</span><span class="badge badge-warning">${esc(semesterMaskLabel(m.semester_mask))}</span></div>
-    <p class="muted" style="margin-bottom:10px;">${esc(m.department_name || '')} ${m.program_name ? '· ' + esc(m.program_name) : ''}</p>
+    <p class="muted" style="margin-bottom:10px;">For: ${m.courses && m.courses.length ? esc(m.courses.map(c => c.name).join(', ')) : 'All courses'}</p>
     ${m.description ? `<p style="margin-bottom:12px;">${esc(m.description)}</p>` : ''}
     <p style="margin-bottom:8px;"><b class="price">${peso(m.price)}</b> <span class="muted">· ${m.body_page_count} body pages · 3 months of access</span></p>
     ${m.is_subscribed
