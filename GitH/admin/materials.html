@@ -136,60 +136,90 @@ async function doAction(id, action, extra) {
 }
 
 // ---------------------------------------------------------
-// "Visible to" picker: All departments and courses, or ticked departments -> ticked courses.
+// "Visible to" picker: a Department dropdown (All departments, or tick one or more)
+// and a Course dropdown listing only the courses of the ticked departments (all pre-ticked).
 // No courses saved = every course may see the material.
 // ---------------------------------------------------------
 function coursePickerHtml(id, selectedIds) {
   const sel = (selectedIds || []).map(Number);
   const all = sel.length === 0;
-  const depts = refs.departments.map(d => {
+  const deptOn = (d) => refs.programs.some(p => p.department_id == d.id && sel.includes(Number(p.id)));
+  const deptOpts = refs.departments.map(d => `<label class="ms-opt"><input type="checkbox" class="cp-dept-box" value="${d.id}" ${deptOn(d) ? 'checked' : ''}> ${esc(d.name)}</label>`).join('');
+  const groups = refs.departments.map(d => {
     const progs = refs.programs.filter(p => p.department_id == d.id);
-    const on = progs.some(p => sel.includes(Number(p.id)));
-    return `<div class="cp-dept">
-      <label class="cp-dept-head"><input type="checkbox" class="cp-dept-box" value="${d.id}" ${on ? 'checked' : ''} ${all ? 'disabled' : ''}> ${esc(d.name)}
-        <span class="muted small cp-count"></span></label>
-      <div class="cp-courses ${on ? '' : 'hidden'}">${progs.length ? progs.map(p => `<label class="cp-course"><input type="checkbox" class="cp-course-box" value="${p.id}" ${sel.includes(Number(p.id)) ? 'checked' : ''} ${all ? 'disabled' : ''}> ${esc(p.name)}</label>`).join('')
-        : '<span class="muted small">No courses in this department yet.</span>'}</div>
-    </div>`;
+    return `<div class="ms-group ${deptOn(d) ? '' : 'hidden'}" data-dept="${d.id}"><div class="ms-group-head">${esc(d.name)}</div>
+      ${progs.length ? progs.map(p => `<label class="ms-opt"><input type="checkbox" class="cp-course-box" value="${p.id}" data-name="${esc(p.name)}" ${sel.includes(Number(p.id)) ? 'checked' : ''}> ${esc(p.name)}</label>`).join('')
+        : '<div class="muted small ms-empty">No courses in this department yet.</div>'}</div>`;
   }).join('');
-  return `<div class="course-picker" id="${id}">
-    <label class="cp-all"><input type="checkbox" class="cp-all-box" ${all ? 'checked' : ''}> <b>All departments and courses</b></label>
-    <div class="cp-depts ${all ? 'cp-off' : ''}">${depts}</div>
+  return `<div class="course-picker form-row" id="${id}">
+    <div><span class="sub-label">Department</span>
+      <div class="ms" data-kind="dept">
+        <button type="button" class="ms-btn" aria-haspopup="true" aria-expanded="false"><span class="ms-text"></span></button>
+        <div class="ms-panel hidden">
+          <label class="ms-opt ms-all"><input type="checkbox" class="cp-all-box" ${all ? 'checked' : ''}> <b>All departments</b></label>
+          ${deptOpts}
+        </div>
+      </div>
+    </div>
+    <div><span class="sub-label">Course</span>
+      <div class="ms" data-kind="course">
+        <button type="button" class="ms-btn" aria-haspopup="true" aria-expanded="false"><span class="ms-text"></span></button>
+        <div class="ms-panel hidden">${groups}</div>
+      </div>
+    </div>
   </div>`;
 }
 
 function bindCoursePicker(id) {
   const root = document.getElementById(id);
-  const refresh = () => root.querySelectorAll('.cp-dept').forEach(d => {
-    const boxes = [...d.querySelectorAll('.cp-course-box')], n = boxes.filter(b => b.checked).length;
-    d.querySelector('.cp-count').textContent = d.querySelector('.cp-dept-box').checked && boxes.length ? `(${n} of ${boxes.length} course${boxes.length === 1 ? '' : 's'})` : '';
-  });
+  const allBox = root.querySelector('.cp-all-box');
+  const deptBoxes = [...root.querySelectorAll('.cp-dept-box')];
+  const [deptMs, courseMs] = root.querySelectorAll('.ms');
+  const close = (ms) => { ms.querySelector('.ms-panel').classList.add('hidden'); ms.querySelector('.ms-btn').setAttribute('aria-expanded', 'false'); };
+  const refresh = () => {
+    const depts = deptBoxes.filter(b => b.checked);
+    root.querySelectorAll('.ms-group').forEach(g => g.classList.toggle('hidden', !depts.some(b => b.value === g.dataset.dept)));
+    const names = depts.map(b => b.parentElement.textContent.trim());
+    deptMs.querySelector('.ms-text').textContent = allBox.checked ? 'All departments'
+      : !names.length ? 'Choose departments' : names.length <= 3 ? names.join(', ') : `${names.length} departments`;
+    const courseBtn = courseMs.querySelector('.ms-btn');
+    courseBtn.disabled = allBox.checked || !names.length;
+    const shown = [...root.querySelectorAll('.ms-group:not(.hidden) .cp-course-box')], on = shown.filter(b => b.checked);
+    courseMs.querySelector('.ms-text').textContent = allBox.checked ? 'All courses'
+      : !names.length ? 'Choose a department first' : !on.length ? 'Choose courses'
+      : on.length === shown.length ? `All courses (${shown.length})`
+      : on.length <= 2 ? on.map(b => b.dataset.name).join(', ') : `${on.length} of ${shown.length} courses`;
+    if (courseBtn.disabled) close(courseMs);
+  };
+  root.querySelectorAll('.ms').forEach(ms => ms.querySelector('.ms-btn').addEventListener('click', () => {
+    const panel = ms.querySelector('.ms-panel'), opening = panel.classList.contains('hidden');
+    root.querySelectorAll('.ms').forEach(close);
+    if (opening) { panel.classList.remove('hidden'); ms.querySelector('.ms-btn').setAttribute('aria-expanded', 'true'); }
+  }));
+  // click anywhere else (or Esc) closes the open dropdown
+  const outside = (e) => { if (!document.body.contains(root)) return document.removeEventListener('click', outside, true); if (!root.contains(e.target)) root.querySelectorAll('.ms').forEach(close); };
+  document.addEventListener('click', outside, true);
+  root.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); root.querySelectorAll('.ms').forEach(close); } });
   root.addEventListener('change', (e) => {
     const t = e.target;
-    if (t.classList.contains('cp-all-box')) {
-      root.querySelector('.cp-depts').classList.toggle('cp-off', t.checked);
-      root.querySelectorAll('.cp-dept-box, .cp-course-box').forEach(b => { b.disabled = t.checked; });
+    if (t === allBox && t.checked) {
+      deptBoxes.forEach(b => { b.checked = false; });
+      root.querySelectorAll('.cp-course-box').forEach(b => { b.checked = false; });
     } else if (t.classList.contains('cp-dept-box')) {
-      const d = t.closest('.cp-dept');
-      d.querySelector('.cp-courses').classList.toggle('hidden', !t.checked);
-      d.querySelectorAll('.cp-course-box').forEach(b => { b.checked = t.checked; });   // ticking a department pre-ticks all its courses
-    } else if (t.classList.contains('cp-course-box')) {
-      const d = t.closest('.cp-dept');
-      if (![...d.querySelectorAll('.cp-course-box')].some(b => b.checked)) {   // last course unticked -> close the department
-        d.querySelector('.cp-dept-box').checked = false; d.querySelector('.cp-courses').classList.add('hidden');
-      }
+      if (t.checked) allBox.checked = false;
+      root.querySelectorAll(`.ms-group[data-dept="${t.value}"] .cp-course-box`).forEach(b => { b.checked = t.checked; });   // a newly ticked department starts with all its courses ticked
     }
     refresh();
   });
   refresh();
 }
 
-/** 'all', or the ticked course ids; null (and an error toast) when nothing is ticked. */
+/** 'all', or the ticked course ids; null (and an error toast unless quiet) when nothing usable is ticked. */
 function readCoursePicker(id, quiet) {
   const root = document.getElementById(id);
   if (root.querySelector('.cp-all-box').checked) return 'all';
-  const ids = [...root.querySelectorAll('.cp-course-box:checked')].map(b => Number(b.value));
-  if (!ids.length) { if (!quiet) toast('Tick at least one course under "Visible to", or tick "All departments and courses".', 'error'); return null; }
+  const ids = [...root.querySelectorAll('.ms-group:not(.hidden) .cp-course-box:checked')].map(b => Number(b.value));
+  if (!ids.length) { if (!quiet) toast('Under "Visible to", choose at least one department and course, or pick "All departments".', 'error'); return null; }
   return ids;
 }
 
@@ -330,7 +360,7 @@ async function handleUploadSubmit(e) {
   if (!fields.year_levels) { box.innerHTML = `<div class="alert alert-error">Tag at least one year level this material is accessible for.</div>`; return; }
   if (!fields.semesters) { box.innerHTML = `<div class="alert alert-error">Tag at least one semester this material is accessible for.</div>`; return; }
   if (!fields.author_name) { box.innerHTML = `<div class="alert alert-error">Author is required.</div>`; return; }
-  if (!fields.program_ids) { box.innerHTML = `<div class="alert alert-error">Under "Visible to", tick at least one course, or tick "All departments and courses".</div>`; return; }
+  if (!fields.program_ids) { box.innerHTML = `<div class="alert alert-error">Under "Visible to", choose at least one department and course, or pick "All departments".</div>`; return; }
 
   const submitBtn = document.getElementById('uploadSubmitBtn');
   submitBtn.disabled = true;

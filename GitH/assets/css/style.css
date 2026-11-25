@@ -413,13 +413,19 @@ body.reg { background: var(--slate-50); }
 
 .reader-end { color: #e2e8f0; padding: 12px 0 32px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
 
-/* ---------- "Visible to" course picker (admin materials) ---------- */
-.course-picker { border: 1px solid var(--slate-200); border-radius: 10px; padding: 10px 12px; margin-top: 4px; max-height: 280px; overflow-y: auto; }
-.course-picker label { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 400; cursor: pointer; }
-.course-picker input[type=checkbox] { width: auto; margin: 0; }
-.cp-all { padding-bottom: 8px; border-bottom: 1px solid var(--slate-200); margin-bottom: 6px !important; }
-.cp-depts.cp-off { opacity: .45; }
-.cp-dept { padding: 4px 0; }
-.cp-dept-head { font-weight: 600 !important; }
-.cp-courses { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; padding: 4px 0 4px 26px; font-size: 14px; }
-@media (max-width: 560px) { .cp-courses { grid-template-columns: 1fr; } }
+/* ---------- "Visible to" picker: two checkbox dropdowns (admin materials) ---------- */
+.course-picker { margin-top: 4px; }
+.course-picker .sub-label { display: block; font-size: 12px; color: var(--slate-500); margin-bottom: 4px; }
+.ms { position: relative; }
+.ms-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border: 1px solid var(--slate-300); border-radius: var(--r-md); background: var(--surface); font: 400 14px/1.4 'Inter', sans-serif; color: var(--slate-900); text-align: left; cursor: pointer; }
+.ms-btn::after { content: ''; flex-shrink: 0; width: 8px; height: 8px; border-right: 2px solid var(--slate-500); border-bottom: 2px solid var(--slate-500); transform: rotate(45deg) translateY(-3px); }
+.ms-btn[aria-expanded="true"] { border-color: var(--indigo-600); }
+.ms-btn:disabled { background: var(--slate-100); color: var(--slate-500); cursor: not-allowed; }
+.ms-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-panel { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 60; background: var(--surface); border: 1px solid var(--slate-200); border-radius: var(--r-md); box-shadow: 0 10px 24px rgba(15, 23, 42, .14); padding: 6px; max-height: 240px; overflow-y: auto; }
+.ms-opt { display: flex !important; align-items: center; gap: 8px; margin: 0 !important; padding: 7px 8px; border-radius: 6px; font-weight: 400; cursor: pointer; }
+.ms-opt:hover { background: var(--slate-50); }
+.ms-opt input[type=checkbox] { width: auto; margin: 0; }
+.ms-all { border-bottom: 1px solid var(--slate-200); border-radius: 6px 6px 0 0; margin-bottom: 4px !important; }
+.ms-group-head { font-size: 11px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; color: var(--slate-500); padding: 8px 8px 2px; }
+.ms-empty { padding: 4px 8px 8px; }
